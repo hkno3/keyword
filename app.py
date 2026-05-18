@@ -24,7 +24,10 @@ with st.sidebar:
     )
     st.divider()
     naver_ok = bool(os.getenv("NAVER_AD_API_KEY")) and bool(os.getenv("NAVER_CLIENT_ID"))
-    st.success("✅ 네이버 API 연결됨") if naver_ok else st.error("❌ 네이버 API 키 없음")
+    if naver_ok:
+        st.success("✅ 네이버 API 연결됨")
+    else:
+        st.error("❌ 네이버 API 키 없음")
     st.divider()
     st.markdown(
         "**경쟁 강도 기준** (문서수 ÷ 검색량)\n"

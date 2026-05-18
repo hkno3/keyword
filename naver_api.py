@@ -77,6 +77,10 @@ def get_related_keywords(seed_keywords: List[str], customer_id: str, api_key: st
                         "pc_search": pc,
                         "mobile_search": mobile,
                         "total_search": total,
+                        "pc_click": _parse_count(item.get("monthlyAvePcClkCnt", 0)),
+                        "mobile_click": _parse_count(item.get("monthlyAveMobileClkCnt", 0)),
+                        "pc_ctr": item.get("monthlyAvePcCtr", 0),
+                        "mobile_ctr": item.get("monthlyAveMobileCtr", 0),
                         "comp_idx": item.get("compIdx", "N/A"),
                     }
         except Exception as e:
@@ -131,7 +135,14 @@ def build_keyword_table(related: Dict[str, Dict], doc_counts: Dict[str, int]) ->
         level, stars, ratio = competition_level(total, doc)
         rows.append({
             "keyword": kw,
+            "pc_search": data.get("pc_search", 0),
+            "mobile_search": data.get("mobile_search", 0),
             "total_search": total,
+            "pc_click": data.get("pc_click", 0),
+            "mobile_click": data.get("mobile_click", 0),
+            "pc_ctr": data.get("pc_ctr", 0),
+            "mobile_ctr": data.get("mobile_ctr", 0),
+            "comp_idx": data.get("comp_idx", "N/A"),
             "doc_count": doc,
             "level": level,
             "stars": stars,

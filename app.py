@@ -82,12 +82,8 @@ if st.button("🚀 키워드 분석 시작", type="primary", use_container_width
 
         # 검색량 100 미만 제외 후 문서수 조회
         to_lookup = {k: v for k, v in related.items() if v["total_search"] >= 100}
-        st.write(f"📊 블로그 문서수 조회 중... ({len(to_lookup)}개 병렬 처리)")
-        try:
-            doc_counts = naver_api.get_doc_counts_parallel(list(to_lookup.keys()), naver_id, naver_secret)
-        except RuntimeError as e:
-            st.error(f"❌ 블로그 검색 API 오류: {e}\n\n.env의 NAVER_CLIENT_ID / NAVER_CLIENT_SECRET을 확인하세요.")
-            st.stop()
+        st.write(f"📊 블로그 문서수 조회 중... ({len(to_lookup)}개, 속도 제한 준수)")
+        doc_counts = naver_api.get_doc_counts_parallel(list(to_lookup.keys()), naver_id, naver_secret)
 
         table = naver_api.build_keyword_table(to_lookup, doc_counts)
         st.session_state.keyword_table = table

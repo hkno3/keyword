@@ -71,8 +71,8 @@ def get_keyword_stats(
         params = {"hintKeywords": ",".join(batch), "showDetail": "1"}
 
         try:
-            # 콤마를 인코딩하지 않고 URL 직접 구성 (requests의 %2C 변환 방지)
-            encoded = urllib.parse.quote(",".join(batch), safe=",")
+            # 각 키워드는 quote_plus(공백→+), 키워드 간 구분은 콤마(,) 유지
+            encoded = ",".join(urllib.parse.quote_plus(kw) for kw in batch)
             url = f"{SEARCH_AD_BASE_URL}{uri}?hintKeywords={encoded}&showDetail=1"
             resp = requests.get(url, headers=headers, timeout=10)
             print(f"[SearchAD] 상태코드: {resp.status_code}")

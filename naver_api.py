@@ -13,8 +13,7 @@ SEARCH_API_BASE_URL = "https://openapi.naver.com"
 
 def _generate_signature(timestamp: str, method: str, uri: str, secret_key: str) -> str:
     message = f"{timestamp}.{method}.{uri}"
-    secret_bytes = base64.b64decode(secret_key)
-    h = hmac.new(secret_bytes, message.encode("utf-8"), digestmod=hashlib.sha256)
+    h = hmac.new(secret_key.encode("utf-8"), message.encode("utf-8"), digestmod=hashlib.sha256)
     return base64.b64encode(h.digest()).decode("utf-8")
 
 

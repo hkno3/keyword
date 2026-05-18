@@ -68,13 +68,35 @@ def get_keyword_stats(
                 timeout=10,
             )
             resp.raise_for_status()
-            for item in resp.json().get("keywordList", []):
+            keyword_list = resp.json().get("keywordList", [])
+
+            # API가 반환한 전체 키워드를 저장
+            returned: Dict[str, Dict] = {}
+            for item in keyword_list:
                 kw = item.get("relKeyword", "")
-                results[kw] = {
+                returned[kw] = {
                     "pc_search": _parse_count(item.get("monthlyPcQcCnt", 0)),
                     "mobile_search": _parse_count(item.get("monthlyMobileQcCnt", 0)),
                     "comp_idx": item.get("compIdx", "N/A"),
                 }
+
+            # 각 힌트 키워드를 반환 결과와 매칭 (공백·대소문자 무시)
+            for hint in batch:
+                hint_norm = hint.lower().replace(" ", "")
+                if hint in returned:
+                    results[hint] = returned[hint]
+                else:
+                    matched = next(
+                        (data for kw, data in returned.items()
+                         if kw.lower().replace(" ", "") == hint_norm),
+                        None,
+                    )
+                    # 매칭 실패 시 API 첫 번째 결과로 대체
+                    results[hint] = matched if matched else (
+                        list(returned.values())[0] if returned else
+                        {"pc_search": 0, "mobile_search": 0, "comp_idx": "N/A"}
+                    )
+
         except Exception as e:
             print(f"[SearchAD API 오류] {e}")
 

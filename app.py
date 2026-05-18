@@ -150,7 +150,7 @@ if run:
             }
         )
 
-    st.dataframe(pd.DataFrame(table_rows), use_container_width=True, hide_index=True)
+    st.dataframe(pd.DataFrame(table_rows), width="stretch", hide_index=True)
 
     # ── 상세 보기 (대안 제목 포함) ────────────────────────
     with st.expander("📋 대안 제목 전체 보기"):

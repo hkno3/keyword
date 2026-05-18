@@ -5,7 +5,7 @@ import time
 import requests
 from typing import List, Dict
 
-SEARCH_AD_BASE_URL = "https://api.naver.com"
+SEARCH_AD_BASE_URL = "https://api.searchad.naver.com"
 SEARCH_API_BASE_URL = "https://openapi.naver.com"
 
 

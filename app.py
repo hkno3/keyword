@@ -9,12 +9,11 @@ import claude_service
 
 load_dotenv()
 
-# ── 페이지 설정 ──────────────────────────────────────────
 st.set_page_config(page_title="수익형 키워드 분석기", page_icon="🔍", layout="wide")
 st.title("🔍 수익형 키워드 분석기")
-st.caption("뉴스 기사를 붙여넣으면 수익성 높은 블로그 키워드를 자동 추출합니다")
+st.caption("뉴스 기사를 붙여넣으면 경쟁 낮은 블로그 키워드를 자동으로 찾아줍니다")
 
-# ── 사이드바: API 키 설정 ─────────────────────────────────
+# ── 사이드바 ─────────────────────────────────────────────
 with st.sidebar:
     st.header("⚙️ API 설정")
     groq_key = st.text_input(
@@ -23,17 +22,12 @@ with st.sidebar:
         type="password",
         help="https://console.groq.com 에서 발급 (무료)",
     )
-
     st.divider()
     naver_ok = bool(os.getenv("NAVER_AD_API_KEY")) and bool(os.getenv("NAVER_CLIENT_ID"))
-    if naver_ok:
-        st.success("✅ 네이버 API 연결됨")
-    else:
-        st.error("❌ 네이버 API 키 없음 (.env 확인)")
-
+    st.success("✅ 네이버 API 연결됨") if naver_ok else st.error("❌ 네이버 API 키 없음")
     st.divider()
     st.markdown(
-        "**경쟁 강도 기준** (문서량 ÷ 검색량)\n"
+        "**경쟁 강도 기준** (문서수 ÷ 검색량)\n"
         "- ⭐⭐⭐⭐⭐ 매우 낮음 `< 0.5`\n"
         "- ⭐⭐⭐⭐ 낮음 `0.5~1`\n"
         "- ⭐⭐⭐ 보통 `1~3`\n"
@@ -41,129 +35,154 @@ with st.sidebar:
         "- ⭐ 매우 높음 `> 10`"
     )
 
-# ── 메인: 기사 입력 ───────────────────────────────────────
-article_text = st.text_area(
+# ── 세션 초기화 ───────────────────────────────────────────
+for key in ["keyword_table", "selected_kw", "titles"]:
+    if key not in st.session_state:
+        st.session_state[key] = None
+
+# ── PHASE 1: 기사 입력 ────────────────────────────────────
+article = st.text_area(
     "뉴스 기사 붙여넣기",
-    height=300,
-    placeholder=(
-        "뉴스 기사 전체를 복사해서 붙여넣으세요.\n"
-        "기자명, SNS 버튼 등 UI 잔재가 포함돼도 자동으로 걸러냅니다."
-    ),
+    height=250,
+    placeholder="뉴스 기사 전체를 복사해서 붙여넣으세요.",
 )
 
-run = st.button("🚀 키워드 분석 시작", type="primary", use_container_width=True)
-
-if run:
-    # ── 입력값 검증 ──────────────────────────────────────
-    if not article_text.strip():
+if st.button("🚀 키워드 분석 시작", type="primary", use_container_width=True):
+    if not article.strip():
         st.error("기사를 입력해주세요.")
         st.stop()
     if not groq_key:
         st.error("Groq API 키를 입력해주세요.")
         st.stop()
     if not naver_ok:
-        st.error(".env 파일에 네이버 API 키를 설정해주세요.")
+        st.error(".env 파일에 네이버 API 키를 확인해주세요.")
         st.stop()
 
-    # ── 환경변수 로드 ─────────────────────────────────────
+    groq_client = Groq(api_key=groq_key)
     customer_id = os.getenv("NAVER_AD_CUSTOMER_ID", "")
-    ad_api_key = os.getenv("NAVER_AD_API_KEY", "")
+    ad_key = os.getenv("NAVER_AD_API_KEY", "")
     ad_secret = os.getenv("NAVER_AD_SECRET_KEY", "")
-    naver_client_id = os.getenv("NAVER_CLIENT_ID", "")
-    naver_client_secret = os.getenv("NAVER_CLIENT_SECRET", "")
-
-    claude_client = Groq(api_key=groq_key)
-    results = []
+    naver_id = os.getenv("NAVER_CLIENT_ID", "")
+    naver_secret = os.getenv("NAVER_CLIENT_SECRET", "")
 
     with st.status("분석 중...", expanded=True) as status:
-
-        # STEP 1: 키워드 추출
-        st.write("📝 AI가 키워드 추출 중...")
-        keywords = claude_service.extract_keywords(article_text, claude_client)
-        if not keywords:
-            st.error("키워드 추출에 실패했습니다. 기사 내용을 확인해주세요.")
+        st.write("📝 씨드 키워드 추출 중...")
+        seeds = claude_service.extract_seed_keywords(article, groq_client)
+        if not seeds:
+            st.error("키워드 추출 실패")
             st.stop()
-        st.write(f"✅ {len(keywords)}개 키워드 추출 완료")
+        st.write(f"✅ 씨드 키워드: {', '.join(seeds)}")
 
-        # STEP 2: 네이버 검색광고 API → 월 검색량
-        st.write("📊 네이버 검색광고 API 호출 중...")
-        stats_map = naver_api.get_keyword_stats(keywords, customer_id, ad_api_key, ad_secret)
+        st.write("🔍 네이버 연관키워드 수집 중...")
+        related = naver_api.get_related_keywords(seeds, customer_id, ad_key, ad_secret)
+        st.write(f"✅ 연관키워드 {len(related)}개 수집")
 
-        # STEP 3: 네이버 블로그 검색 API → 문서량 + 경쟁 강도 계산
-        st.write("🔎 블로그 문서량 확인 및 경쟁 강도 계산 중...")
-        candidates = []
+        # 검색량 100 미만 제외 후 문서수 조회
+        to_lookup = {k: v for k, v in related.items() if v["total_search"] >= 100}
+        st.write(f"📊 블로그 문서수 조회 중... ({len(to_lookup)}개 병렬 처리)")
+        doc_counts = naver_api.get_doc_counts_parallel(list(to_lookup.keys()), naver_id, naver_secret)
 
-        for kw in keywords:
-            stat = stats_map.get(kw, {"pc_search": 0, "mobile_search": 0})
-            total_search = stat["pc_search"] + stat["mobile_search"]
-            doc_count = naver_api.get_blog_doc_count(kw, naver_client_id, naver_client_secret)
-            level, stars, ratio = naver_api.competition_level(total_search, doc_count)
+        table = naver_api.build_keyword_table(to_lookup, doc_counts)
+        st.session_state.keyword_table = table
+        st.session_state.selected_kw = None
+        st.session_state.titles = None
+        status.update(label=f"✅ 완료! 키워드 {len(table)}개 분석됨", state="complete")
 
-            candidates.append(
-                {
-                    "keyword": kw,
-                    "total_search": total_search,
-                    "doc_count": doc_count,
-                    "level": level,
-                    "stars": stars,
-                    "ratio": ratio,
+# ── PHASE 2: 필터 슬라이더 + 테이블 ──────────────────────
+if st.session_state.keyword_table:
+    table = st.session_state.keyword_table
+
+    if not table:
+        st.warning("조건에 맞는 키워드가 없습니다.")
+        st.stop()
+
+    max_search = max(r["total_search"] for r in table)
+    max_docs = max(r["doc_count"] for r in table)
+
+    st.subheader("📊 키워드 목록")
+    col1, col2 = st.columns(2)
+    with col1:
+        min_search = st.slider("최소 월 검색량", 0, max(max_search, 1), min(500, max_search))
+    with col2:
+        max_doc = st.slider("최대 문서수", 0, max(max_docs, 1), max_docs)
+
+    filtered = [r for r in table if r["total_search"] >= min_search and r["doc_count"] <= max_doc]
+
+    if not filtered:
+        st.warning("조건에 맞는 키워드가 없어요. 슬라이더를 조절해보세요.")
+    else:
+        df = pd.DataFrame([{
+            "키워드": r["keyword"],
+            "월 검색수": f"{r['total_search']:,}",
+            "문서수": f"{r['doc_count']:,}",
+            "경쟁 강도": r["level"],
+            "추천도": r["stars"],
+        } for r in filtered])
+
+        st.dataframe(df, hide_index=True, width="stretch")
+        st.caption(f"총 {len(filtered)}개 키워드 | 경쟁 낮은 순 정렬")
+
+        # ── PHASE 3: 키워드 선택 → 제목 생성 ────────────────
+        st.divider()
+        st.subheader("✍️ 제목 생성")
+
+        kw_list = [r["keyword"] for r in filtered]
+        selected = st.selectbox("제목 생성할 키워드 선택", kw_list)
+
+        if st.button("📝 제목 5개 생성", type="primary"):
+            if not groq_key:
+                st.error("Groq API 키를 입력해주세요.")
+            else:
+                groq_client = Groq(api_key=groq_key)
+                with st.spinner("제목 생성 중..."):
+                    titles = claude_service.generate_titles(selected, groq_client)
+                kw_data = next(r for r in filtered if r["keyword"] == selected)
+                st.session_state.titles = {
+                    "keyword": selected,
+                    "titles": titles,
+                    "data": kw_data,
                 }
-            )
 
-        # STEP 4: ⭐⭐⭐⭐⭐ 필터 → 검색량 높은 순 TOP 5
-        top5 = sorted(
-            [c for c in candidates if c["stars"] == "⭐⭐⭐⭐⭐"],
-            key=lambda x: x["total_search"],
-            reverse=True,
-        )[:5]
+# ── PHASE 4: 결과 테이블 (복사/다운로드) ─────────────────
+if st.session_state.titles:
+    t = st.session_state.titles
+    d = t["data"]
 
-        fallback = False
-        if not top5:
-            fallback = True
-            top5 = sorted(candidates, key=lambda x: (len(x["stars"]), x["total_search"]), reverse=True)[:5]
+    st.divider()
+    st.subheader("📋 생성된 제목")
 
-        # STEP 5: Groq → 블로그 제목 생성
-        st.write("✍️ 블로그 제목 생성 중...")
-        for item in top5:
-            titles = claude_service.generate_titles(item["keyword"], claude_client)
-            item["titles"] = titles
-            item["best_title"] = titles[0] if titles else f"{item['keyword']} 활용법 3가지"
-            results.append(item)
+    rows = []
+    for title in t["titles"]:
+        v = claude_service.validate_title(title, t["keyword"])
+        length_str = f"{v['length']}자 {'✅' if v['length_ok'] else '❌'}"
+        rows.append({
+            "포커스 키워드": t["keyword"],
+            "블로그 제목": title,
+            "글자수": length_str,
+            "검색수": d["total_search"],
+            "문서수": d["doc_count"],
+            "경쟁 강도": d["level"],
+            "추천도": d["stars"],
+        })
 
-        status.update(label="✅ 분석 완료!", state="complete")
+    result_df = pd.DataFrame(rows)
+    st.dataframe(result_df, hide_index=True, width="stretch")
 
-    # ── 결과 출력 ─────────────────────────────────────────
-    if fallback:
-        st.warning("⭐⭐⭐⭐⭐ 키워드가 없어 상위 5개를 대신 표시합니다.")
+    # 엑셀 복사용 (글자수 컬럼 제외)
+    export_df = pd.DataFrame([{
+        "포커스 키워드": r["포커스 키워드"],
+        "블로그 제목": r["블로그 제목"],
+        "검색수": r["검색수"],
+        "문서수": r["문서수"],
+        "경쟁 강도": r["경쟁 강도"],
+        "추천도": r["추천도"],
+    } for r in rows])
 
-    st.subheader("📊 추천 키워드 TOP 5")
-
-    table_rows = []
-    for r in results:
-        table_rows.append(
-            {
-                "포커스 키워드": r["keyword"],
-                "블로그 제목": r["best_title"],
-                "월검색 / 문서수": f"{r['total_search']:,} / {r['doc_count']:,}",
-                "경쟁 강도": r["level"],
-                "추천도": r["stars"],
-            }
-        )
-
-    st.dataframe(pd.DataFrame(table_rows), width="stretch", hide_index=True)
-
-    # ── 상세 보기 (대안 제목 포함) ────────────────────────
-    with st.expander("📋 대안 제목 전체 보기"):
-        for r in results:
-            st.markdown(f"### {r['keyword']}")
-            st.caption(f"월 검색량 {r['total_search']:,}회 · 블로그 문서 {r['doc_count']:,}건 · 경쟁비율 {r['ratio']:.2f}")
-            for i, title in enumerate(r.get("titles", []), 1):
-                v = claude_service.validate_title(title, r["keyword"])
-                length_color = "green" if v["length_ok"] else "red"
-                pos_color = "green" if v["keyword_pos_ok"] else "orange"
-                st.markdown(
-                    f"{i}. **{title}**  "
-                    f":{length_color}[{v['length']}자] "
-                    f":{pos_color}[키워드 {v['keyword_pos']+1}번째 글자부터]"
-                )
-            st.divider()
+    csv = export_df.to_csv(index=False, encoding="utf-8-sig")
+    st.download_button(
+        "⬇️ 엑셀용 CSV 다운로드",
+        data=csv,
+        file_name=f"{t['keyword']}_제목.csv",
+        mime="text/csv",
+        use_container_width=True,
+    )

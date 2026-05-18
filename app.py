@@ -176,7 +176,8 @@ if st.session_state.keyword_table:
         st.warning("조건에 맞는 키워드가 없어요. 슬라이더를 조절해보세요.")
     else:
         df = pd.DataFrame([{
-            "키워드": f"[{r['keyword']}](https://search.naver.com/search.naver?query={r['keyword']})",
+            "키워드": r["keyword"],
+            "검색": f"https://search.naver.com/search.naver?query={r['keyword']}",
             "검색_PC": f"{r['pc_search']:,}",
             "검색_모바일": f"{r['mobile_search']:,}",
             "월검색(합계)": f"{r['total_search']:,}",
@@ -191,7 +192,7 @@ if st.session_state.keyword_table:
         } for r in filtered])
 
         st.dataframe(df, hide_index=True, use_container_width=True,
-                     column_config={"키워드": st.column_config.LinkColumn("키워드", display_text=r"\[(.+?)\]")})
+                     column_config={"검색": st.column_config.LinkColumn("검색", display_text="🔍 네이버")})
         st.caption(f"총 {len(filtered)}개 키워드 | 경쟁 낮은 순 정렬")
 
         tsv = df.to_csv(sep="\t", index=False).replace("`", "'").replace("\\", "\\\\")

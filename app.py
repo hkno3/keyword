@@ -76,9 +76,12 @@ for key in ["keyword_table", "selected_kw", "titles"]:
         st.session_state[key] = None
 
 # ── PHASE 1: 기사 입력 ────────────────────────────────────
+if "article_text" not in st.session_state:
+    st.session_state.article_text = ""
+
 article = st.text_area(
     "뉴스 기사 붙여넣기",
-    value=st.session_state.pop("article_text", ""),
+    key="article_text",
     height=250,
     placeholder="뉴스 기사 전체를 복사해서 붙여넣으세요. 또는 위 뉴스에서 '이 기사 분석' 클릭",
 )

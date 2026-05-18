@@ -2,7 +2,7 @@ import os
 import streamlit as st
 import pandas as pd
 from dotenv import load_dotenv
-from anthropic import Anthropic
+from groq import Groq
 
 import naver_api
 import claude_service
@@ -17,11 +17,11 @@ st.caption("뉴스 기사를 붙여넣으면 수익성 높은 블로그 키워�
 # ── 사이드바: API 키 설정 ─────────────────────────────────
 with st.sidebar:
     st.header("⚙️ API 설정")
-    anthropic_key = st.text_input(
-        "Claude API Key",
-        value=os.getenv("ANTHROPIC_API_KEY", ""),
+    groq_key = st.text_input(
+        "Groq API Key",
+        value=os.getenv("GROQ_API_KEY", ""),
         type="password",
-        help="https://console.anthropic.com 에서 발급",
+        help="https://console.groq.com 에서 발급 (무료)",
     )
 
     st.divider()
@@ -58,8 +58,8 @@ if run:
     if not article_text.strip():
         st.error("기사를 입력해주세요.")
         st.stop()
-    if not anthropic_key:
-        st.error("Claude API 키를 입력해주세요.")
+    if not groq_key:
+        st.error("Groq API 키를 입력해주세요.")
         st.stop()
     if not naver_ok:
         st.error(".env 파일에 네이버 API 키를 설정해주세요.")
@@ -72,13 +72,13 @@ if run:
     naver_client_id = os.getenv("NAVER_CLIENT_ID", "")
     naver_client_secret = os.getenv("NAVER_CLIENT_SECRET", "")
 
-    claude_client = Anthropic(api_key=anthropic_key)
+    claude_client = Groq(api_key=groq_key)
     results = []
 
     with st.status("분석 중...", expanded=True) as status:
 
         # STEP 1: 키워드 추출
-        st.write("📝 Claude가 키워드 추출 중...")
+        st.write("📝 AI가 키워드 추출 중...")
         keywords = claude_service.extract_keywords(article_text, claude_client)
         if not keywords:
             st.error("키워드 추출에 실패했습니다. 기사 내용을 확인해주세요.")
@@ -122,7 +122,7 @@ if run:
             fallback = True
             top5 = sorted(candidates, key=lambda x: (len(x["stars"]), x["total_search"]), reverse=True)[:5]
 
-        # STEP 5: Claude → 블로그 제목 생성
+        # STEP 5: Groq → 블로그 제목 생성
         st.write("✍️ 블로그 제목 생성 중...")
         for item in top5:
             titles = claude_service.generate_titles(item["keyword"], claude_client)

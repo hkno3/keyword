@@ -1,5 +1,6 @@
 import os
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 from dotenv import load_dotenv
 from groq import Groq
@@ -131,6 +132,12 @@ if st.session_state.keyword_table:
 
         st.dataframe(df, hide_index=True, width="stretch")
         st.caption(f"총 {len(filtered)}개 키워드 | 경쟁 낮은 순 정렬")
+
+        tsv = df.to_csv(sep="\t", index=False).replace("`", "'").replace("\\", "\\\\")
+        components.html(f"""
+<button onclick="navigator.clipboard.writeText(`{tsv}`).then(()=>{{this.textContent='✅ 복사됨!';setTimeout(()=>this.textContent='📋 표 복사 (엑셀 붙여넣기용)',2000)}}).catch(()=>alert('복사 실패: 브라우저 권한을 확인하세요'))">📋 표 복사 (엑셀 붙여넣기용)</button>
+<style>button{{padding:8px 20px;background:#ff4b4b;color:white;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-family:sans-serif}}</style>
+""", height=50)
 
         # ── PHASE 3: 키워드 선택 → 제목 생성 ────────────────
         st.divider()

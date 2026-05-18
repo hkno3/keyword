@@ -28,25 +28,16 @@ def _ad_headers(method: str, uri: str, customer_id: str, api_key: str, secret_ke
     }
 
 
-def _test_single_keyword(customer_id: str, api_key: str, secret_key: str):
-    """단일 키워드 '김치'로 API 기본 동작 확인"""
-    uri = "/keywordstool"
-    headers = _ad_headers("GET", uri, customer_id, api_key, secret_key)
-    test_url = f"{SEARCH_AD_BASE_URL}{uri}?hintKeywords=%EA%B9%80%EC%B9%98&showDetail=1"
-    try:
-        resp = requests.get(test_url, headers=headers, timeout=10)
-        print(f"[테스트] 단일키워드 '김치' → 상태코드: {resp.status_code}")
-        print(f"[테스트] 응답: {resp.text[:200]}")
-    except Exception as e:
-        print(f"[테스트] 오류: {e}")
+
+def _sanitize_keyword(keyword: str) -> str:
+    """공백 제거 후 한국어·영어·숫자만 남김 (40자 이내)"""
+    kw = re.sub(r'\s+', '', keyword.strip())  # 띄어쓰기 제거
+    kw = re.sub(r'[^가-힣a-zA-Z0-9]', '', kw)  # 허용 외 문자 제거
+    return kw[:40]
 
 
 def _is_valid_keyword(keyword: str) -> bool:
-    """한국어, 영어, 숫자, 공백만 허용 / 40자 이내"""
-    return (
-        bool(re.match(r'^[가-힣a-zA-Z0-9\s]+$', keyword.strip()))
-        and 1 <= len(keyword.strip()) <= 40
-    )
+    return len(_sanitize_keyword(keyword)) >= 1
 
 
 def _parse_count(value) -> int:
@@ -73,12 +64,8 @@ def get_keyword_stats(
     """네이버 검색광고 API로 키워드별 월 검색량 조회 (5개씩 배치)"""
     results: Dict[str, Dict] = {}
 
-    # ── 연결 테스트: 단일 키워드 '김치'로 API 작동 확인 ──────
-    _test_single_keyword(customer_id, api_key, secret_key)
-
     # 유효하지 않은 키워드 사전 필터링
-    valid_keywords = [kw for kw in keywords if _is_valid_keyword(kw)]
-    print(f"[SearchAD] 유효 키워드 {len(valid_keywords)}/{len(keywords)}개")
+    valid_keywords = [_sanitize_keyword(kw) for kw in keywords if _is_valid_keyword(kw)]
 
     for i in range(0, len(valid_keywords), 5):
         batch = valid_keywords[i : i + 5]
@@ -91,8 +78,6 @@ def get_keyword_stats(
             encoded = ",".join(urllib.parse.quote_plus(kw) for kw in batch)
             url = f"{SEARCH_AD_BASE_URL}{uri}?hintKeywords={encoded}&showDetail=1"
             resp = requests.get(url, headers=headers, timeout=10)
-            print(f"[SearchAD] 상태코드: {resp.status_code}")
-            print(f"[SearchAD] 응답내용: {resp.text[:300]}")
             resp.raise_for_status()
             keyword_list = resp.json().get("keywordList", [])
 

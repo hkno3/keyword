@@ -1,13 +1,13 @@
 import json
 import re
-from anthropic import Anthropic
+from groq import Groq
 
-MODEL = "claude-sonnet-4-6"
+MODEL = "llama-3.3-70b-versatile"
 
 
-def extract_keywords(article: str, client: Anthropic) -> list[str]:
+def extract_keywords(article: str, client: Groq) -> list[str]:
     """기사 텍스트에서 SEO 키워드 15개 추출"""
-    response = client.messages.create(
+    response = client.chat.completions.create(
         model=MODEL,
         max_tokens=800,
         messages=[
@@ -31,7 +31,7 @@ JSON 배열로만 반환하세요 (설명 없이): ["키워드1", "키워드2", 
         ],
     )
 
-    text = response.content[0].text.strip()
+    text = response.choices[0].message.content.strip()
     match = re.search(r"\[.*?\]", text, re.DOTALL)
     if match:
         try:
@@ -41,9 +41,9 @@ JSON 배열로만 반환하세요 (설명 없이): ["키워드1", "키워드2", 
     return []
 
 
-def generate_titles(keyword: str, client: Anthropic) -> list[str]:
+def generate_titles(keyword: str, client: Groq) -> list[str]:
     """키워드에 대한 블로그 제목 5개 생성 (규칙 엄수)"""
-    response = client.messages.create(
+    response = client.chat.completions.create(
         model=MODEL,
         max_tokens=600,
         messages=[
@@ -66,7 +66,7 @@ JSON 배열로만 반환 (설명 없이): ["제목1", "제목2", "제목3", "제
         ],
     )
 
-    text = response.content[0].text.strip()
+    text = response.choices[0].message.content.strip()
     match = re.search(r"\[.*?\]", text, re.DOTALL)
     if match:
         try:

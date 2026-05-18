@@ -1,5 +1,6 @@
 import os
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 from dotenv import load_dotenv
 from groq import Groq
@@ -50,6 +51,11 @@ article = st.text_area(
     placeholder="뉴스 기사 전체를 복사해서 붙여넣으세요.",
 )
 
+col_a, col_b = st.columns(2)
+with col_a:
+    min_search_pre = st.number_input("문서수 조회 최소 검색량 (API 절약)", min_value=0, value=3000, step=100,
+                                     help="이 검색량 이상인 키워드만 블로그 문서수를 조회합니다")
+
 if st.button("🚀 키워드 분석 시작", type="primary", use_container_width=True):
     if not article.strip():
         st.error("기사를 입력해주세요.")
@@ -80,13 +86,13 @@ if st.button("🚀 키워드 분석 시작", type="primary", use_container_width
         related = naver_api.get_related_keywords(seeds, customer_id, ad_key, ad_secret)
         st.write(f"✅ 연관키워드 {len(related)}개 수집")
 
-        # 검색량 100 미만 제외 후 문서수 조회
-        to_lookup = {k: v for k, v in related.items() if v["total_search"] >= 100}
-        st.write(f"📊 블로그 문서수 조회 중... ({len(to_lookup)}개, 속도 제한 준수)")
+        to_lookup = {k: v for k, v in related.items() if v["total_search"] >= min_search_pre}
+        st.write(f"📊 블로그 문서수 조회 중... ({len(to_lookup)}개, 검색량 {min_search_pre:,} 이상만)")
         doc_counts = naver_api.get_doc_counts_parallel(list(to_lookup.keys()), naver_id, naver_secret)
 
         table = naver_api.build_keyword_table(to_lookup, doc_counts)
         st.session_state.keyword_table = table
+        st.session_state.min_search_pre = min_search_pre
         st.session_state.selected_kw = None
         st.session_state.titles = None
         status.update(label=f"✅ 완료! 키워드 {len(table)}개 분석됨", state="complete")
@@ -103,11 +109,12 @@ if st.session_state.keyword_table:
     max_docs = max(r["doc_count"] for r in table)
 
     st.subheader("📊 키워드 목록")
+    default_min = st.session_state.get("min_search_pre", 3000)
     col1, col2 = st.columns(2)
     with col1:
-        min_search = st.slider("최소 월 검색량", 0, max(max_search, 1), min(3000, max_search))
+        min_search = st.number_input("최소 월 검색량", min_value=0, value=default_min, step=100)
     with col2:
-        max_doc = st.slider("최대 문서수", 0, max(max_docs, 1), min(20000, max_docs))
+        max_doc = st.number_input("최대 문서수", min_value=0, value=20000, step=1000)
 
     filtered = [r for r in table if r["total_search"] >= min_search and r["doc_count"] <= max_doc]
 
@@ -131,6 +138,12 @@ if st.session_state.keyword_table:
 
         st.dataframe(df, hide_index=True, width="stretch")
         st.caption(f"총 {len(filtered)}개 키워드 | 경쟁 낮은 순 정렬")
+
+        tsv = df.to_csv(sep="\t", index=False).replace("`", "'").replace("\\", "\\\\")
+        components.html(f"""
+<button onclick="navigator.clipboard.writeText(`{tsv}`).then(()=>{{this.textContent='✅ 복사됨!';setTimeout(()=>this.textContent='📋 표 복사 (엑셀 붙여넣기용)',2000)}}).catch(()=>alert('복사 실패: 브라우저 권한을 확인하세요'))">📋 표 복사 (엑셀 붙여넣기용)</button>
+<style>button{{padding:8px 20px;background:#ff4b4b;color:white;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-family:sans-serif}}</style>
+""", height=50)
 
         # ── PHASE 3: 키워드 선택 → 제목 생성 ────────────────
         st.divider()

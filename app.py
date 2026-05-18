@@ -105,9 +105,9 @@ if st.session_state.keyword_table:
     st.subheader("📊 키워드 목록")
     col1, col2 = st.columns(2)
     with col1:
-        min_search = st.slider("최소 월 검색량", 0, max(max_search, 1), min(500, max_search))
+        min_search = st.slider("최소 월 검색량", 0, max(max_search, 1), min(3000, max_search))
     with col2:
-        max_doc = st.slider("최대 문서수", 0, max(max_docs, 1), max_docs)
+        max_doc = st.slider("최대 문서수", 0, max(max_docs, 1), min(20000, max_docs))
 
     filtered = [r for r in table if r["total_search"] >= min_search and r["doc_count"] <= max_doc]
 

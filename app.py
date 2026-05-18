@@ -1,5 +1,6 @@
 import os
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 from dotenv import load_dotenv
 from groq import Groq
@@ -105,9 +106,9 @@ if st.session_state.keyword_table:
     st.subheader("📊 키워드 목록")
     col1, col2 = st.columns(2)
     with col1:
-        min_search = st.slider("최소 월 검색량", 0, max(max_search, 1), min(3000, max_search))
+        min_search = st.number_input("최소 월 검색량", min_value=0, value=3000, step=100)
     with col2:
-        max_doc = st.slider("최대 문서수", 0, max(max_docs, 1), min(20000, max_docs))
+        max_doc = st.number_input("최대 문서수", min_value=0, value=20000, step=1000)
 
     filtered = [r for r in table if r["total_search"] >= min_search and r["doc_count"] <= max_doc]
 
@@ -131,6 +132,12 @@ if st.session_state.keyword_table:
 
         st.dataframe(df, hide_index=True, width="stretch")
         st.caption(f"총 {len(filtered)}개 키워드 | 경쟁 낮은 순 정렬")
+
+        tsv = df.to_csv(sep="\t", index=False).replace("`", "'").replace("\\", "\\\\")
+        components.html(f"""
+<button onclick="navigator.clipboard.writeText(`{tsv}`).then(()=>{{this.textContent='✅ 복사됨!';setTimeout(()=>this.textContent='📋 표 복사 (엑셀 붙여넣기용)',2000)}}).catch(()=>alert('복사 실패: 브라우저 권한을 확인하세요'))">📋 표 복사 (엑셀 붙여넣기용)</button>
+<style>button{{padding:8px 20px;background:#ff4b4b;color:white;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-family:sans-serif}}</style>
+""", height=50)
 
         # ── PHASE 3: 키워드 선택 → 제목 생성 ────────────────
         st.divider()

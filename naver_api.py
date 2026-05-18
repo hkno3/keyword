@@ -28,6 +28,19 @@ def _ad_headers(method: str, uri: str, customer_id: str, api_key: str, secret_ke
     }
 
 
+def _test_single_keyword(customer_id: str, api_key: str, secret_key: str):
+    """단일 키워드 '김치'로 API 기본 동작 확인"""
+    uri = "/keywordstool"
+    headers = _ad_headers("GET", uri, customer_id, api_key, secret_key)
+    test_url = f"{SEARCH_AD_BASE_URL}{uri}?hintKeywords=%EA%B9%80%EC%B9%98&showDetail=1"
+    try:
+        resp = requests.get(test_url, headers=headers, timeout=10)
+        print(f"[테스트] 단일키워드 '김치' → 상태코드: {resp.status_code}")
+        print(f"[테스트] 응답: {resp.text[:200]}")
+    except Exception as e:
+        print(f"[테스트] 오류: {e}")
+
+
 def _is_valid_keyword(keyword: str) -> bool:
     """한국어, 영어, 숫자, 공백만 허용 / 40자 이내"""
     return (
@@ -59,6 +72,9 @@ def get_keyword_stats(
 ) -> Dict[str, Dict]:
     """네이버 검색광고 API로 키워드별 월 검색량 조회 (5개씩 배치)"""
     results: Dict[str, Dict] = {}
+
+    # ── 연결 테스트: 단일 키워드 '김치'로 API 작동 확인 ──────
+    _test_single_keyword(customer_id, api_key, secret_key)
 
     # 유효하지 않은 키워드 사전 필터링
     valid_keywords = [kw for kw in keywords if _is_valid_keyword(kw)]

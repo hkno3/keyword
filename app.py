@@ -51,14 +51,19 @@ article = st.text_area(
     placeholder="뉴스 기사 전체를 복사해서 붙여넣으세요.",
 )
 
+manual_keywords = st.text_input(
+    "직접 키워드 추가 (쉼표로 구분)",
+    placeholder="예: 김치, 유산균, 발효",
+)
+
 col_a, col_b = st.columns(2)
 with col_a:
     min_search_pre = st.number_input("문서수 조회 최소 검색량 (API 절약)", min_value=0, value=3000, step=100,
                                      help="이 검색량 이상인 키워드만 블로그 문서수를 조회합니다")
 
 if st.button("🚀 키워드 분석 시작", type="primary", use_container_width=True):
-    if not article.strip():
-        st.error("기사를 입력해주세요.")
+    if not article.strip() and not manual_keywords.strip():
+        st.error("기사를 입력하거나 직접 키워드를 입력해주세요.")
         st.stop()
     if not groq_key:
         st.error("Groq API 키를 입력해주세요.")
@@ -75,10 +80,18 @@ if st.button("🚀 키워드 분석 시작", type="primary", use_container_width
     naver_secret = os.getenv("NAVER_CLIENT_SECRET", "")
 
     with st.status("분석 중...", expanded=True) as status:
-        st.write("📝 씨드 키워드 추출 중...")
-        seeds = claude_service.extract_seed_keywords(article, groq_client)
+        manual = [k.strip() for k in manual_keywords.split(",") if k.strip()] if manual_keywords.strip() else []
+
+        if article.strip():
+            st.write("📝 씨드 키워드 추출 중...")
+            seeds = claude_service.extract_seed_keywords(article, groq_client)
+        else:
+            seeds = []
+
+        seeds = list(dict.fromkeys(seeds + manual))  # 중복 제거, 순서 유지
+
         if not seeds:
-            st.error("키워드 추출 실패")
+            st.error("기사를 입력하거나 직접 키워드를 입력해주세요.")
             st.stop()
         st.write(f"✅ 씨드 키워드: {', '.join(seeds)}")
 

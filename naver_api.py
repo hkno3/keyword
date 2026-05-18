@@ -1,6 +1,7 @@
 import hmac
 import hashlib
 import base64
+import re
 import time
 import requests
 from typing import List, Dict
@@ -30,6 +31,14 @@ def _ad_headers(method: str, uri: str, customer_id: str, api_key: str, secret_ke
     }
 
 
+def _is_valid_keyword(keyword: str) -> bool:
+    """한국어, 영어, 숫자, 공백만 허용 / 40자 이내"""
+    return (
+        bool(re.match(r'^[가-힣a-zA-Z0-9\s]+$', keyword.strip()))
+        and 1 <= len(keyword.strip()) <= 40
+    )
+
+
 def _parse_count(value) -> int:
     """'< 10' 같은 문자열도 숫자로 변환"""
     if isinstance(value, (int, float)):
@@ -54,8 +63,12 @@ def get_keyword_stats(
     """네이버 검색광고 API로 키워드별 월 검색량 조회 (5개씩 배치)"""
     results: Dict[str, Dict] = {}
 
-    for i in range(0, len(keywords), 5):
-        batch = keywords[i : i + 5]
+    # 유효하지 않은 키워드 사전 필터링
+    valid_keywords = [kw for kw in keywords if _is_valid_keyword(kw)]
+    print(f"[SearchAD] 유효 키워드 {len(valid_keywords)}/{len(keywords)}개")
+
+    for i in range(0, len(valid_keywords), 5):
+        batch = valid_keywords[i : i + 5]
         uri = "/keywordstool"
         headers = _ad_headers("GET", uri, customer_id, api_key, secret_key)
         params = {"hintKeywords": ",".join(batch), "showDetail": "1"}

@@ -24,7 +24,10 @@ with st.sidebar:
     )
     st.divider()
     naver_ok = bool(os.getenv("NAVER_AD_API_KEY")) and bool(os.getenv("NAVER_CLIENT_ID"))
-    st.success("✅ 네이버 API 연결됨") if naver_ok else st.error("❌ 네이버 API 키 없음")
+    if naver_ok:
+        st.success("✅ 네이버 API 연결됨")
+    else:
+        st.error("❌ 네이버 API 키 없음")
     st.divider()
     st.markdown(
         "**경쟁 강도 기준** (문서수 ÷ 검색량)\n"
@@ -80,7 +83,11 @@ if st.button("🚀 키워드 분석 시작", type="primary", use_container_width
         # 검색량 100 미만 제외 후 문서수 조회
         to_lookup = {k: v for k, v in related.items() if v["total_search"] >= 100}
         st.write(f"📊 블로그 문서수 조회 중... ({len(to_lookup)}개 병렬 처리)")
-        doc_counts = naver_api.get_doc_counts_parallel(list(to_lookup.keys()), naver_id, naver_secret)
+        try:
+            doc_counts = naver_api.get_doc_counts_parallel(list(to_lookup.keys()), naver_id, naver_secret)
+        except RuntimeError as e:
+            st.error(f"❌ 블로그 검색 API 오류: {e}\n\n.env의 NAVER_CLIENT_ID / NAVER_CLIENT_SECRET을 확인하세요.")
+            st.stop()
 
         table = naver_api.build_keyword_table(to_lookup, doc_counts)
         st.session_state.keyword_table = table
@@ -102,9 +109,9 @@ if st.session_state.keyword_table:
     st.subheader("📊 키워드 목록")
     col1, col2 = st.columns(2)
     with col1:
-        min_search = st.slider("최소 월 검색량", 0, max(max_search, 1), min(500, max_search))
+        min_search = st.slider("최소 월 검색량", 0, max(max_search, 1), min(3000, max_search))
     with col2:
-        max_doc = st.slider("최대 문서수", 0, max(max_docs, 1), max_docs)
+        max_doc = st.slider("최대 문서수", 0, max(max_docs, 1), min(20000, max_docs))
 
     filtered = [r for r in table if r["total_search"] >= min_search and r["doc_count"] <= max_doc]
 
@@ -113,7 +120,14 @@ if st.session_state.keyword_table:
     else:
         df = pd.DataFrame([{
             "키워드": r["keyword"],
-            "월 검색수": f"{r['total_search']:,}",
+            "검색_PC": f"{r['pc_search']:,}",
+            "검색_모바일": f"{r['mobile_search']:,}",
+            "월검색(합계)": f"{r['total_search']:,}",
+            "클릭_PC": f"{r['pc_click']:,}",
+            "클릭_모바일": f"{r['mobile_click']:,}",
+            "클릭률_PC": f"{r['pc_ctr']}%",
+            "클릭률_모바일": f"{r['mobile_ctr']}%",
+            "경쟁정도(AD)": r["comp_idx"],
             "문서수": f"{r['doc_count']:,}",
             "경쟁 강도": r["level"],
             "추천도": r["stars"],
@@ -159,8 +173,15 @@ if st.session_state.titles:
             "포커스 키워드": t["keyword"],
             "블로그 제목": title,
             "글자수": length_str,
-            "검색수": d["total_search"],
-            "문서수": d["doc_count"],
+            "검색_PC": f"{d.get('pc_search', 0):,}",
+            "검색_모바일": f"{d.get('mobile_search', 0):,}",
+            "월검색(합계)": f"{d['total_search']:,}",
+            "클릭_PC": f"{d.get('pc_click', 0):,}",
+            "클릭_모바일": f"{d.get('mobile_click', 0):,}",
+            "클릭률_PC": f"{d.get('pc_ctr', 0)}%",
+            "클릭률_모바일": f"{d.get('mobile_ctr', 0)}%",
+            "경쟁정도(AD)": d.get("comp_idx", "N/A"),
+            "문서수": f"{d['doc_count']:,}",
             "경쟁 강도": d["level"],
             "추천도": d["stars"],
         })
@@ -172,7 +193,14 @@ if st.session_state.titles:
     export_df = pd.DataFrame([{
         "포커스 키워드": r["포커스 키워드"],
         "블로그 제목": r["블로그 제목"],
-        "검색수": r["검색수"],
+        "검색_PC": r["검색_PC"],
+        "검색_모바일": r["검색_모바일"],
+        "월검색(합계)": r["월검색(합계)"],
+        "클릭_PC": r["클릭_PC"],
+        "클릭_모바일": r["클릭_모바일"],
+        "클릭률_PC": r["클릭률_PC"],
+        "클릭률_모바일": r["클릭률_모바일"],
+        "경쟁정도(AD)": r["경쟁정도(AD)"],
         "문서수": r["문서수"],
         "경쟁 강도": r["경쟁 강도"],
         "추천도": r["추천도"],

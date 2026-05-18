@@ -77,6 +77,10 @@ def get_related_keywords(seed_keywords: List[str], customer_id: str, api_key: st
                         "pc_search": pc,
                         "mobile_search": mobile,
                         "total_search": total,
+                        "pc_click": _parse_count(item.get("monthlyAvePcClkCnt", 0)),
+                        "mobile_click": _parse_count(item.get("monthlyAveMobileClkCnt", 0)),
+                        "pc_ctr": item.get("monthlyAvePcCtr", 0),
+                        "mobile_ctr": item.get("monthlyAveMobileCtr", 0),
                         "comp_idx": item.get("compIdx", "N/A"),
                     }
         except Exception as e:
@@ -86,25 +90,23 @@ def get_related_keywords(seed_keywords: List[str], customer_id: str, api_key: st
 
 
 def get_blog_doc_count(keyword: str, client_id: str, client_secret: str) -> int:
-    try:
-        resp = requests.get(
-            f"{SEARCH_API_BASE_URL}/v1/search/blog.json",
-            headers={
-                "X-Naver-Client-Id": client_id,
-                "X-Naver-Client-Secret": client_secret,
-            },
-            params={"query": keyword, "display": 1},
-            timeout=10,
-        )
-        resp.raise_for_status()
-        return resp.json().get("total", 0)
-    except Exception:
-        return 0
+    resp = requests.get(
+        f"{SEARCH_API_BASE_URL}/v1/search/blog.json",
+        headers={
+            "X-Naver-Client-Id": client_id,
+            "X-Naver-Client-Secret": client_secret,
+        },
+        params={"query": keyword, "display": 1},
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json().get("total", 0)
 
 
 def get_doc_counts_parallel(keywords: List[str], client_id: str, client_secret: str, max_workers: int = 10) -> Dict[str, int]:
     """블로그 문서수 병렬 조회로 속도 향상"""
     results: Dict[str, int] = {}
+    errors: List[str] = []
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {
             executor.submit(get_blog_doc_count, kw, client_id, client_secret): kw
@@ -114,8 +116,13 @@ def get_doc_counts_parallel(keywords: List[str], client_id: str, client_secret: 
             kw = futures[future]
             try:
                 results[kw] = future.result()
-            except Exception:
+            except Exception as e:
                 results[kw] = 0
+                errors.append(str(e))
+
+    if errors:
+        sample = errors[0]
+        raise RuntimeError(f"블로그 문서수 조회 실패 ({len(errors)}/{len(keywords)}건): {sample}")
     return results
 
 
@@ -128,7 +135,14 @@ def build_keyword_table(related: Dict[str, Dict], doc_counts: Dict[str, int]) ->
         level, stars, ratio = competition_level(total, doc)
         rows.append({
             "keyword": kw,
+            "pc_search": data.get("pc_search", 0),
+            "mobile_search": data.get("mobile_search", 0),
             "total_search": total,
+            "pc_click": data.get("pc_click", 0),
+            "mobile_click": data.get("mobile_click", 0),
+            "pc_ctr": data.get("pc_ctr", 0),
+            "mobile_ctr": data.get("mobile_ctr", 0),
+            "comp_idx": data.get("comp_idx", "N/A"),
             "doc_count": doc,
             "level": level,
             "stars": stars,

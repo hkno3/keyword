@@ -5,6 +5,7 @@ import re
 import time
 import urllib.parse
 import requests
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Dict
 
 SEARCH_AD_BASE_URL = "https://api.searchad.naver.com"
@@ -19,7 +20,6 @@ def _generate_signature(timestamp: str, method: str, uri: str, secret_key: str) 
 
 def _ad_headers(method: str, uri: str, customer_id: str, api_key: str, secret_key: str) -> Dict:
     timestamp = str(int(time.time() * 1000))
-    # GET 요청에는 Content-Type 헤더 제외
     return {
         "X-Timestamp": timestamp,
         "X-API-KEY": api_key,
@@ -28,20 +28,13 @@ def _ad_headers(method: str, uri: str, customer_id: str, api_key: str, secret_ke
     }
 
 
-
 def _sanitize_keyword(keyword: str) -> str:
-    """공백 제거 후 한국어·영어·숫자만 남김 (40자 이내)"""
-    kw = re.sub(r'\s+', '', keyword.strip())  # 띄어쓰기 제거
-    kw = re.sub(r'[^가-힣a-zA-Z0-9]', '', kw)  # 허용 외 문자 제거
+    kw = re.sub(r'\s+', '', keyword.strip())
+    kw = re.sub(r'[^가-힣a-zA-Z0-9]', '', kw)
     return kw[:40]
 
 
-def _is_valid_keyword(keyword: str) -> bool:
-    return len(_sanitize_keyword(keyword)) >= 1
-
-
 def _parse_count(value) -> int:
-    """'< 10' 같은 문자열도 숫자로 변환"""
     if isinstance(value, (int, float)):
         return int(value)
     if isinstance(value, str):
@@ -55,69 +48,44 @@ def _parse_count(value) -> int:
     return 0
 
 
-def get_keyword_stats(
-    keywords: List[str],
-    customer_id: str,
-    api_key: str,
-    secret_key: str,
-) -> Dict[str, Dict]:
-    """네이버 검색광고 API로 키워드별 월 검색량 조회 (5개씩 배치)"""
-    results: Dict[str, Dict] = {}
+def get_related_keywords(seed_keywords: List[str], customer_id: str, api_key: str, secret_key: str) -> Dict[str, Dict]:
+    """씨드 키워드(단일)로 연관키워드 전체 수집 — 중복 시 검색량 높은 것 유지"""
+    all_keywords: Dict[str, Dict] = {}
 
-    # 원본 키워드 → 정제 키워드 매핑 (결과를 원본 키워드로 반환하기 위해)
-    sanitize_map = {kw: _sanitize_keyword(kw) for kw in keywords if _is_valid_keyword(kw)}
-    valid_originals = list(sanitize_map.keys())
+    for seed in seed_keywords:
+        sanitized = _sanitize_keyword(seed)
+        if not sanitized:
+            continue
 
-    for i in range(0, len(valid_originals), 5):
-        batch_originals = valid_originals[i : i + 5]
-        batch = [sanitize_map[kw] for kw in batch_originals]
         uri = "/keywordstool"
         headers = _ad_headers("GET", uri, customer_id, api_key, secret_key)
-        params = {"hintKeywords": ",".join(batch), "showDetail": "1"}
+        encoded = urllib.parse.quote_plus(sanitized)
+        url = f"{SEARCH_AD_BASE_URL}{uri}?hintKeywords={encoded}&showDetail=1"
 
         try:
-            # 각 키워드는 quote_plus(공백→+), 키워드 간 구분은 콤마(,) 유지
-            encoded = ",".join(urllib.parse.quote_plus(kw) for kw in batch)
-            url = f"{SEARCH_AD_BASE_URL}{uri}?hintKeywords={encoded}&showDetail=1"
             resp = requests.get(url, headers=headers, timeout=10)
             resp.raise_for_status()
-            keyword_list = resp.json().get("keywordList", [])
 
-            # API가 반환한 전체 키워드를 저장
-            returned: Dict[str, Dict] = {}
-            for item in keyword_list:
+            for item in resp.json().get("keywordList", []):
                 kw = item.get("relKeyword", "")
-                returned[kw] = {
-                    "pc_search": _parse_count(item.get("monthlyPcQcCnt", 0)),
-                    "mobile_search": _parse_count(item.get("monthlyMobileQcCnt", 0)),
-                    "comp_idx": item.get("compIdx", "N/A"),
-                }
+                pc = _parse_count(item.get("monthlyPcQcCnt", 0))
+                mobile = _parse_count(item.get("monthlyMobileQcCnt", 0))
+                total = pc + mobile
 
-            # 결과를 원본 키워드로 저장 (공백·대소문자 무시 매칭)
-            for orig, sanitized in zip(batch_originals, batch):
-                hint_norm = sanitized.lower()
-                if sanitized in returned:
-                    results[orig] = returned[sanitized]
-                else:
-                    matched = next(
-                        (data for kw, data in returned.items()
-                         if kw.lower().replace(" ", "") == hint_norm),
-                        None,
-                    )
-                    # 매칭 실패 시 API 첫 번째 결과로 대체
-                    results[orig] = matched if matched else (
-                        list(returned.values())[0] if returned else
-                        {"pc_search": 0, "mobile_search": 0, "comp_idx": "N/A"}
-                    )
-
+                if kw not in all_keywords or total > all_keywords[kw]["total_search"]:
+                    all_keywords[kw] = {
+                        "pc_search": pc,
+                        "mobile_search": mobile,
+                        "total_search": total,
+                        "comp_idx": item.get("compIdx", "N/A"),
+                    }
         except Exception as e:
-            print(f"[SearchAD API 오류] {e}")
+            print(f"[SearchAD] '{seed}' 오류: {e}")
 
-    return results
+    return all_keywords
 
 
 def get_blog_doc_count(keyword: str, client_id: str, client_secret: str) -> int:
-    """네이버 블로그 검색 API로 총 문서 수 조회"""
     try:
         resp = requests.get(
             f"{SEARCH_API_BASE_URL}/v1/search/blog.json",
@@ -130,21 +98,49 @@ def get_blog_doc_count(keyword: str, client_id: str, client_secret: str) -> int:
         )
         resp.raise_for_status()
         return resp.json().get("total", 0)
-    except Exception as e:
-        print(f"[Search API 오류] {e}")
+    except Exception:
         return 0
 
 
+def get_doc_counts_parallel(keywords: List[str], client_id: str, client_secret: str, max_workers: int = 10) -> Dict[str, int]:
+    """블로그 문서수 병렬 조회로 속도 향상"""
+    results: Dict[str, int] = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(get_blog_doc_count, kw, client_id, client_secret): kw
+            for kw in keywords
+        }
+        for future in as_completed(futures):
+            kw = futures[future]
+            try:
+                results[kw] = future.result()
+            except Exception:
+                results[kw] = 0
+    return results
+
+
+def build_keyword_table(related: Dict[str, Dict], doc_counts: Dict[str, int]) -> List[Dict]:
+    """검색량 + 문서수 + 경쟁강도 통합 테이블 생성 (경쟁 낮은 순 정렬)"""
+    rows = []
+    for kw, data in related.items():
+        total = data["total_search"]
+        doc = doc_counts.get(kw, 0)
+        level, stars, ratio = competition_level(total, doc)
+        rows.append({
+            "keyword": kw,
+            "total_search": total,
+            "doc_count": doc,
+            "level": level,
+            "stars": stars,
+            "ratio": ratio,
+        })
+    return sorted(rows, key=lambda x: x["ratio"])
+
+
 def competition_level(search_volume: int, doc_count: int):
-    """
-    경쟁 강도 = 문서량 / 검색량
-    낮을수록 공략하기 좋은 키워드
-    """
     if search_volume == 0:
         return "매우 높음", "⭐", 999.0
-
     ratio = doc_count / search_volume
-
     if ratio < 0.5:
         return "매우 낮음", "⭐⭐⭐⭐⭐", ratio
     elif ratio < 1.0:

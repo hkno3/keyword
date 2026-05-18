@@ -67,6 +67,8 @@ def get_keyword_stats(
                 params=params,
                 timeout=10,
             )
+            print(f"[SearchAD] 상태코드: {resp.status_code}")
+            print(f"[SearchAD] 응답내용: {resp.text[:300]}")
             resp.raise_for_status()
             keyword_list = resp.json().get("keywordList", [])
 

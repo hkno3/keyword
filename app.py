@@ -7,12 +7,42 @@ from groq import Groq
 
 import naver_api
 import claude_service
+import news_fetcher
 
 load_dotenv()
 
 st.set_page_config(page_title="수익형 키워드 분석기", page_icon="🔍", layout="wide")
 st.title("🔍 수익형 키워드 분석기")
 st.caption("뉴스 기사를 붙여넣으면 경쟁 낮은 블로그 키워드를 자동으로 찾아줍니다")
+
+# ── 뉴스 탭 ──────────────────────────────────────────────
+st.subheader("📰 카테고리별 최신 뉴스")
+탭건강, 탭부동산, 탭사업, 탭투자 = st.tabs(["💊 건강", "🏠 부동산", "💼 사업", "📈 투자"])
+
+for tab, category in [(탭건강, "건강"), (탭부동산, "부동산"), (탭사업, "사업"), (탭투자, "투자")]:
+    with tab:
+        if st.button(f"{category} 뉴스 불러오기", key=f"load_{category}"):
+            with st.spinner("뉴스 수집 중..."):
+                st.session_state[f"news_{category}"] = news_fetcher.fetch_category_news(category)
+
+        articles = st.session_state.get(f"news_{category}", [])
+        if articles:
+            st.caption(f"총 {len(articles)}개 기사")
+            for i, a in enumerate(articles):
+                col1, col2 = st.columns([8, 2])
+                with col1:
+                    st.markdown(f"[{a['pubDate']}] [{a['title']}]({a['link']})")
+                with col2:
+                    if st.button("이 기사 분석", key=f"analyze_{category}_{i}"):
+                        with st.spinner("기사 본문 가져오는 중..."):
+                            text = news_fetcher.scrape_article(a["link"])
+                        if text:
+                            st.session_state.article_text = text
+                            st.rerun()
+                        else:
+                            st.warning("본문을 가져올 수 없어요. 직접 붙여넣기 해주세요.")
+
+st.divider()
 
 # ── 사이드바 ─────────────────────────────────────────────
 with st.sidebar:
@@ -47,8 +77,9 @@ for key in ["keyword_table", "selected_kw", "titles"]:
 # ── PHASE 1: 기사 입력 ────────────────────────────────────
 article = st.text_area(
     "뉴스 기사 붙여넣기",
+    value=st.session_state.pop("article_text", ""),
     height=250,
-    placeholder="뉴스 기사 전체를 복사해서 붙여넣으세요.",
+    placeholder="뉴스 기사 전체를 복사해서 붙여넣으세요. 또는 위 뉴스에서 '이 기사 분석' 클릭",
 )
 
 manual_keywords = st.text_input(

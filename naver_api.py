@@ -3,6 +3,7 @@ import hashlib
 import base64
 import re
 import time
+import urllib.parse
 import requests
 from typing import List, Dict
 
@@ -74,12 +75,10 @@ def get_keyword_stats(
         params = {"hintKeywords": ",".join(batch), "showDetail": "1"}
 
         try:
-            resp = requests.get(
-                f"{SEARCH_AD_BASE_URL}{uri}",
-                headers=headers,
-                params=params,
-                timeout=10,
-            )
+            # 콤마를 인코딩하지 않고 URL 직접 구성 (requests의 %2C 변환 방지)
+            encoded = urllib.parse.quote(",".join(batch), safe=",")
+            url = f"{SEARCH_AD_BASE_URL}{uri}?hintKeywords={encoded}&showDetail=1"
+            resp = requests.get(url, headers=headers, timeout=10)
             print(f"[SearchAD] 상태코드: {resp.status_code}")
             print(f"[SearchAD] 응답내용: {resp.text[:300]}")
             resp.raise_for_status()

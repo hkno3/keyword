@@ -114,9 +114,15 @@ if st.session_state.keyword_table:
     with col1:
         min_search = st.number_input("최소 월 검색량", min_value=0, value=default_min, step=100)
     with col2:
-        max_doc = st.number_input("최대 문서수", min_value=0, value=10000, step=1000)
+        max_doc = st.number_input("최대 문서수 (0=제한없음)", min_value=0, value=0, step=1000)
 
-    filtered = [r for r in table if r["total_search"] >= min_search and r["doc_count"] <= max_doc and r["stars"] in ("⭐⭐⭐⭐", "⭐⭐⭐⭐⭐")]
+    filtered = [
+        r for r in table
+        if r["total_search"] >= min_search
+        and (max_doc == 0 or r["doc_count"] <= max_doc)
+        and r["stars"] in ("⭐⭐⭐⭐", "⭐⭐⭐⭐⭐")
+        and (r["pc_ctr"] > 0 or r["mobile_ctr"] > 0)
+    ]
 
     if not filtered:
         st.warning("조건에 맞는 키워드가 없어요. 슬라이더를 조절해보세요.")

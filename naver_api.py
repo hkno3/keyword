@@ -64,11 +64,13 @@ def get_keyword_stats(
     """네이버 검색광고 API로 키워드별 월 검색량 조회 (5개씩 배치)"""
     results: Dict[str, Dict] = {}
 
-    # 유효하지 않은 키워드 사전 필터링
-    valid_keywords = [_sanitize_keyword(kw) for kw in keywords if _is_valid_keyword(kw)]
+    # 원본 키워드 → 정제 키워드 매핑 (결과를 원본 키워드로 반환하기 위해)
+    sanitize_map = {kw: _sanitize_keyword(kw) for kw in keywords if _is_valid_keyword(kw)}
+    valid_originals = list(sanitize_map.keys())
 
-    for i in range(0, len(valid_keywords), 5):
-        batch = valid_keywords[i : i + 5]
+    for i in range(0, len(valid_originals), 5):
+        batch_originals = valid_originals[i : i + 5]
+        batch = [sanitize_map[kw] for kw in batch_originals]
         uri = "/keywordstool"
         headers = _ad_headers("GET", uri, customer_id, api_key, secret_key)
         params = {"hintKeywords": ",".join(batch), "showDetail": "1"}
@@ -91,11 +93,11 @@ def get_keyword_stats(
                     "comp_idx": item.get("compIdx", "N/A"),
                 }
 
-            # 각 힌트 키워드를 반환 결과와 매칭 (공백·대소문자 무시)
-            for hint in batch:
-                hint_norm = hint.lower().replace(" ", "")
-                if hint in returned:
-                    results[hint] = returned[hint]
+            # 결과를 원본 키워드로 저장 (공백·대소문자 무시 매칭)
+            for orig, sanitized in zip(batch_originals, batch):
+                hint_norm = sanitized.lower()
+                if sanitized in returned:
+                    results[orig] = returned[sanitized]
                 else:
                     matched = next(
                         (data for kw, data in returned.items()
@@ -103,7 +105,7 @@ def get_keyword_stats(
                         None,
                     )
                     # 매칭 실패 시 API 첫 번째 결과로 대체
-                    results[hint] = matched if matched else (
+                    results[orig] = matched if matched else (
                         list(returned.values())[0] if returned else
                         {"pc_search": 0, "mobile_search": 0, "comp_idx": "N/A"}
                     )

@@ -127,12 +127,13 @@ def get_autocomplete(keyword: str, max_results: int = 10) -> List[str]:
 
 
 def get_search_volumes_batch(keywords: List[str], customer_id: str, api_key: str, secret_key: str) -> Dict[str, Dict]:
-    """자동완성 키워드 검색량 조회 (키워드별 개별 Search AD 호출)"""
+    """자동완성 키워드 검색량 조회 - 입력한 키워드만 결과로 반환"""
     results: Dict[str, Dict] = {}
     uri = "/keywordstool"
+    # sanitized → original 매핑 (필터링용)
+    sanitized_map = {_sanitize_keyword(kw): kw for kw in keywords if _sanitize_keyword(kw)}
 
-    for kw in keywords:
-        sanitized = _sanitize_keyword(kw)
+    for original_kw, sanitized in [(kw, _sanitize_keyword(kw)) for kw in keywords]:
         if not sanitized:
             continue
         headers = _ad_headers("GET", uri, customer_id, api_key, secret_key)
@@ -143,11 +144,16 @@ def get_search_volumes_batch(keywords: List[str], customer_id: str, api_key: str
             resp.raise_for_status()
             for item in resp.json().get("keywordList", []):
                 rel_kw = item.get("relKeyword", "")
+                rel_sanitized = _sanitize_keyword(rel_kw)
+                # 입력한 키워드와 매칭되는 것만 저장
+                if rel_sanitized not in sanitized_map:
+                    continue
+                matched_kw = sanitized_map[rel_sanitized]
                 pc = _parse_count(item.get("monthlyPcQcCnt", 0))
                 mobile = _parse_count(item.get("monthlyMobileQcCnt", 0))
                 total = pc + mobile
-                if rel_kw not in results or total > results[rel_kw]["total_search"]:
-                    results[rel_kw] = {
+                if matched_kw not in results or total > results[matched_kw]["total_search"]:
+                    results[matched_kw] = {
                         "pc_search": pc,
                         "mobile_search": mobile,
                         "total_search": total,
@@ -158,7 +164,7 @@ def get_search_volumes_batch(keywords: List[str], customer_id: str, api_key: str
                         "comp_idx": item.get("compIdx", "N/A"),
                     }
         except Exception as e:
-            print(f"[SearchAD] '{kw}' 오류: {e}")
+            print(f"[SearchAD] '{original_kw}' 오류: {e}")
 
     return results
 

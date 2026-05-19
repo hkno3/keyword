@@ -133,6 +133,9 @@ if st.button("🚀 키워드 분석 시작", type="primary", use_container_width
         st.write("🔍 네이버 자동완성 키워드 수집 중...")
         autocomplete_kws = []
         for seed in seeds:
+            if len(seed.strip()) < 2:
+                st.write(f"  · {seed} → 한 글자 스킵")
+                continue
             ac = naver_api.get_autocomplete(seed)
             st.write(f"  · {seed} → {len(ac)}개: {', '.join(ac)}" if ac else f"  · {seed} → 자동완성 없음")
             autocomplete_kws.extend(ac)

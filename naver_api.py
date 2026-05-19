@@ -127,32 +127,27 @@ def get_autocomplete(keyword: str, max_results: int = 10) -> List[str]:
 
 
 def get_search_volumes_batch(keywords: List[str], customer_id: str, api_key: str, secret_key: str) -> Dict[str, Dict]:
-    """자동완성 키워드 검색량 배치 조회 (10개씩 묶어서 Search AD 호출)"""
+    """자동완성 키워드 검색량 조회 (키워드별 개별 Search AD 호출)"""
     results: Dict[str, Dict] = {}
     uri = "/keywordstool"
-    batch_size = 10
 
-    for i in range(0, len(keywords), batch_size):
-        batch = keywords[i:i + batch_size]
-        sanitized = [_sanitize_keyword(kw) for kw in batch]
-        sanitized = [kw for kw in sanitized if kw]
+    for kw in keywords:
+        sanitized = _sanitize_keyword(kw)
         if not sanitized:
             continue
-
         headers = _ad_headers("GET", uri, customer_id, api_key, secret_key)
-        encoded = ",".join(urllib.parse.quote_plus(kw) for kw in sanitized)
+        encoded = urllib.parse.quote_plus(sanitized)
         url = f"{SEARCH_AD_BASE_URL}{uri}?hintKeywords={encoded}&showDetail=1"
-
         try:
             resp = requests.get(url, headers=headers, timeout=10)
             resp.raise_for_status()
             for item in resp.json().get("keywordList", []):
-                kw = item.get("relKeyword", "")
+                rel_kw = item.get("relKeyword", "")
                 pc = _parse_count(item.get("monthlyPcQcCnt", 0))
                 mobile = _parse_count(item.get("monthlyMobileQcCnt", 0))
                 total = pc + mobile
-                if kw not in results or total > results[kw]["total_search"]:
-                    results[kw] = {
+                if rel_kw not in results or total > results[rel_kw]["total_search"]:
+                    results[rel_kw] = {
                         "pc_search": pc,
                         "mobile_search": mobile,
                         "total_search": total,
@@ -163,7 +158,7 @@ def get_search_volumes_batch(keywords: List[str], customer_id: str, api_key: str
                         "comp_idx": item.get("compIdx", "N/A"),
                     }
         except Exception as e:
-            print(f"[SearchAD] 배치 오류: {e}")
+            print(f"[SearchAD] '{kw}' 오류: {e}")
 
     return results
 

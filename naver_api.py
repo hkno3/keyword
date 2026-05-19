@@ -151,7 +151,7 @@ def get_search_volumes_batch(keywords: List[str], customer_id: str, api_key: str
     return results
 
 
-(keyword: str, client_id: str, client_secret: str) -> int:
+def get_blog_doc_count(keyword: str, client_id: str, client_secret: str) -> int:
     for attempt in range(4):
         try:
             resp = requests.get(

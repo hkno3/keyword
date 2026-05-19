@@ -1,4 +1,5 @@
 import os
+import json
 import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
@@ -10,6 +11,21 @@ import claude_service
 import news_fetcher
 
 load_dotenv()
+
+CRAWLED_FILE = os.path.join(os.path.dirname(__file__), "crawled_links.json")
+
+def _load_crawled_links() -> set:
+    try:
+        with open(CRAWLED_FILE, "r", encoding="utf-8") as f:
+            return set(json.load(f))
+    except Exception:
+        return set()
+
+def _save_crawled_link(link: str):
+    links = _load_crawled_links()
+    links.add(link)
+    with open(CRAWLED_FILE, "w", encoding="utf-8") as f:
+        json.dump(list(links), f, ensure_ascii=False)
 
 st.set_page_config(page_title="수익형 키워드 분석기", page_icon="🔍", layout="wide")
 st.title("🔍 수익형 키워드 분석기")
@@ -30,6 +46,14 @@ with st.sidebar:
         st.success("✅ 네이버 API 연결됨")
     else:
         st.error("❌ 네이버 API 키 없음")
+    st.divider()
+    crawled_count = len(_load_crawled_links())
+    st.caption(f"크롤링 기록: {crawled_count}개 기사")
+    if st.button("🗑️ 크롤링 기록 초기화"):
+        if os.path.exists(CRAWLED_FILE):
+            os.remove(CRAWLED_FILE)
+        st.session_state.auto_crawled = []
+        st.rerun()
     st.divider()
     st.markdown(
         "**경쟁 강도 기준** (문서수 ÷ 검색량)\n"
@@ -84,6 +108,8 @@ for key in ["auto_keywords", "auto_crawled", "auto_running"]:
     if key not in st.session_state:
         st.session_state[key] = [] if key != "auto_running" else False
 
+crawled_file_links = _load_crawled_links()
+
 col_cat, col_num, col_btn1, col_btn2 = st.columns([2, 1, 1, 1])
 with col_cat:
     auto_category = st.selectbox("카테고리", ["건강", "부동산", "사업", "투자"], label_visibility="collapsed")
@@ -131,8 +157,6 @@ def _render_auto_table(keywords):
 <button onclick="navigator.clipboard.writeText(`{tsv}`).then(()=>{{this.textContent='✅ 복사됨!';setTimeout(()=>this.textContent='📋 표 복사 (엑셀 붙여넣기용)',2000)}}).catch(()=>alert('복사 실패'))">📋 표 복사 (엑셀 붙여넣기용)</button>
 <style>button{{padding:8px 20px;background:#ff4b4b;color:white;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-family:sans-serif}}</style>
 """, height=50)
-        csv = export_df.to_csv(index=False, encoding="utf-8-sig")
-        st.download_button("⬇️ CSV 다운로드", data=csv, file_name="자동키워드.csv", mime="text/csv", key="auto_csv")
 
 _render_auto_table(st.session_state.auto_keywords)
 
@@ -154,7 +178,7 @@ if start_btn:
                 st.session_state[f"news_{auto_category}"] = news_fetcher.fetch_category_news(auto_category, max_total=1000)
 
         articles = st.session_state[f"news_{auto_category}"]
-        crawled_links = {a["link"] for a in st.session_state.auto_crawled}
+        crawled_links = _load_crawled_links()
         collected = list(st.session_state.auto_keywords)
         collected_kws = {r["keyword"] for r in collected}
 
@@ -173,8 +197,9 @@ if start_btn:
 
             # 크롤링
             text = news_fetcher.scrape_article(article["link"])
-            st.session_state.auto_crawled.append({"link": article["link"], "pubDate": article["pubDate"], "title": article["title"]})
+            _save_crawled_link(article["link"])
             crawled_links.add(article["link"])
+            st.session_state.auto_crawled.append({"link": article["link"], "pubDate": article["pubDate"], "title": article["title"]})
 
             if not text:
                 continue

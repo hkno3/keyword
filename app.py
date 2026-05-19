@@ -93,7 +93,7 @@ manual_keywords = st.text_input(
 
 col_a, col_b = st.columns(2)
 with col_a:
-    min_search_pre = st.number_input("문서수 조회 최소 검색량 (API 절약)", min_value=0, value=3000, step=100,
+    min_search_pre = st.number_input("문서수 조회 최소 검색량 (API 절약)", min_value=0, value=2000, step=100,
                                      help="이 검색량 이상인 키워드만 블로그 문서수를 조회합니다")
 
 if st.button("🚀 키워드 분석 시작", type="primary", use_container_width=True):

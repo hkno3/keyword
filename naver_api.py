@@ -89,7 +89,69 @@ def get_related_keywords(seed_keywords: List[str], customer_id: str, api_key: st
     return all_keywords
 
 
-def get_blog_doc_count(keyword: str, client_id: str, client_secret: str) -> int:
+def get_autocomplete(keyword: str, max_results: int = 10) -> List[str]:
+    """네이버 자동완성 키워드 수집 (공식 API 키 불필요)"""
+    try:
+        resp = requests.get(
+            "https://ac.search.naver.com/nx/ac",
+            params={"q": keyword, "con": "1", "frm": "nv", "ans": "2",
+                    "r_format": "json", "r_enc": "UTF-8"},
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=5,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        items = data.get("items", [])
+        if items and isinstance(items[0], list):
+            return [item[0] for item in items[0][:max_results] if item]
+        return []
+    except Exception:
+        return []
+
+
+def get_search_volumes_batch(keywords: List[str], customer_id: str, api_key: str, secret_key: str) -> Dict[str, Dict]:
+    """자동완성 키워드 검색량 배치 조회 (10개씩 묶어서 Search AD 호출)"""
+    results: Dict[str, Dict] = {}
+    uri = "/keywordstool"
+    batch_size = 10
+
+    for i in range(0, len(keywords), batch_size):
+        batch = keywords[i:i + batch_size]
+        sanitized = [_sanitize_keyword(kw) for kw in batch]
+        sanitized = [kw for kw in sanitized if kw]
+        if not sanitized:
+            continue
+
+        headers = _ad_headers("GET", uri, customer_id, api_key, secret_key)
+        encoded = ",".join(urllib.parse.quote_plus(kw) for kw in sanitized)
+        url = f"{SEARCH_AD_BASE_URL}{uri}?hintKeywords={encoded}&showDetail=1"
+
+        try:
+            resp = requests.get(url, headers=headers, timeout=10)
+            resp.raise_for_status()
+            for item in resp.json().get("keywordList", []):
+                kw = item.get("relKeyword", "")
+                pc = _parse_count(item.get("monthlyPcQcCnt", 0))
+                mobile = _parse_count(item.get("monthlyMobileQcCnt", 0))
+                total = pc + mobile
+                if kw not in results or total > results[kw]["total_search"]:
+                    results[kw] = {
+                        "pc_search": pc,
+                        "mobile_search": mobile,
+                        "total_search": total,
+                        "pc_click": _parse_count(item.get("monthlyAvePcClkCnt", 0)),
+                        "mobile_click": _parse_count(item.get("monthlyAveMobileClkCnt", 0)),
+                        "pc_ctr": item.get("monthlyAvePcCtr", 0),
+                        "mobile_ctr": item.get("monthlyAveMobileCtr", 0),
+                        "comp_idx": item.get("compIdx", "N/A"),
+                    }
+        except Exception as e:
+            print(f"[SearchAD] 배치 오류: {e}")
+
+    return results
+
+
+(keyword: str, client_id: str, client_secret: str) -> int:
     for attempt in range(4):
         try:
             resp = requests.get(

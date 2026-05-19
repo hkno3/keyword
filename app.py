@@ -130,9 +130,17 @@ if st.button("🚀 키워드 분석 시작", type="primary", use_container_width
             st.stop()
         st.write(f"✅ 씨드 키워드: {', '.join(seeds)}")
 
-        st.write("🔍 네이버 연관키워드 수집 중...")
-        related = naver_api.get_related_keywords(seeds, customer_id, ad_key, ad_secret)
-        st.write(f"✅ 연관키워드 {len(related)}개 수집")
+        st.write("🔍 네이버 자동완성 키워드 수집 중...")
+        autocomplete_kws = []
+        for seed in seeds:
+            ac = naver_api.get_autocomplete(seed)
+            autocomplete_kws.extend(ac)
+        autocomplete_kws = list(dict.fromkeys(autocomplete_kws))
+        st.write(f"✅ 자동완성 키워드 {len(autocomplete_kws)}개 수집: {', '.join(autocomplete_kws[:10])}{'...' if len(autocomplete_kws) > 10 else ''}")
+
+        st.write(f"📈 검색량 조회 중... ({len(autocomplete_kws)}개)")
+        related = naver_api.get_search_volumes_batch(autocomplete_kws, customer_id, ad_key, ad_secret)
+        st.write(f"✅ 검색량 데이터 {len(related)}개 수집")
 
         to_lookup = {k: v for k, v in related.items() if v["total_search"] >= min_search_pre}
         st.write(f"📊 블로그 문서수 조회 중... ({len(to_lookup)}개, 검색량 {min_search_pre:,} 이상만)")

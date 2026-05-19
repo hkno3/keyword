@@ -125,7 +125,13 @@ def _render_auto_table(keywords):
         st.success(f"✅ {len(keywords)}개 키워드 수집됨")
         st.dataframe(auto_df, hide_index=True, use_container_width=True,
                      column_config={"검색": st.column_config.LinkColumn("검색", display_text="🔍 네이버")})
-        csv = auto_df.drop(columns=["검색"]).to_csv(index=False, encoding="utf-8-sig")
+        export_df = auto_df.drop(columns=["검색"])
+        tsv = export_df.to_csv(sep="\t", index=False).replace("`", "'").replace("\\", "\\\\")
+        components.html(f"""
+<button onclick="navigator.clipboard.writeText(`{tsv}`).then(()=>{{this.textContent='✅ 복사됨!';setTimeout(()=>this.textContent='📋 표 복사 (엑셀 붙여넣기용)',2000)}}).catch(()=>alert('복사 실패'))">📋 표 복사 (엑셀 붙여넣기용)</button>
+<style>button{{padding:8px 20px;background:#ff4b4b;color:white;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-family:sans-serif}}</style>
+""", height=50)
+        csv = export_df.to_csv(index=False, encoding="utf-8-sig")
         st.download_button("⬇️ CSV 다운로드", data=csv, file_name="자동키워드.csv", mime="text/csv", key="auto_csv")
 
 _render_auto_table(st.session_state.auto_keywords)

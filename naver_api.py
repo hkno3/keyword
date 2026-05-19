@@ -1,6 +1,7 @@
 import hmac
 import hashlib
 import base64
+import json
 import re
 import time
 import urllib.parse
@@ -90,30 +91,39 @@ def get_related_keywords(seed_keywords: List[str], customer_id: str, api_key: st
 
 
 def get_autocomplete(keyword: str, max_results: int = 10) -> List[str]:
-    """네이버 자동완성 키워드 수집"""
-    for params in [
-        {"q": keyword, "con": "1", "frm": "nv", "ans": "2", "r_format": "json", "r_enc": "UTF-8", "r_unicode": "0", "t_koreng": "1", "run": "2", "rev": "4", "q_enc": "UTF-8", "st": "100"},
-        {"query": keyword, "type": "keyword", "count": str(max_results)},
-    ]:
-        for url in ["https://ac.search.naver.com/nx/ac", "https://suggest.naver.com/suggest"]:
-            try:
-                resp = requests.get(url, params=params,
-                                    headers={"User-Agent": "Mozilla/5.0", "Referer": "https://search.naver.com"},
-                                    timeout=5)
-                if not resp.ok:
-                    continue
-                data = resp.json()
-                items = data.get("items", [])
-                if not items:
-                    continue
-                first = items[0]
-                suggestions = first if (isinstance(first, list) and first and isinstance(first[0], list)) else items
-                result = [s[0] for s in suggestions[:max_results] if s and s[0]]
-                if result:
-                    return result
-            except Exception:
-                continue
-    return []
+    """네이버 자동완성 키워드 수집 (JSONP 파싱)"""
+    try:
+        resp = requests.get(
+            "https://ac.search.naver.com/nx/ac",
+            params={
+                "q": keyword, "con": "1", "frm": "nx", "ans": "2",
+                "r_format": "json", "r_enc": "UTF-8", "r_unicode": "0",
+                "t_koreng": "1", "run": "2", "rev": "4", "q_enc": "UTF-8",
+                "st": "100", "ackey": "yuxrhu1i", "_callback": "_jsonp_2",
+            },
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/148.0.0.0 Safari/537.36",
+                "Referer": "https://search.naver.com/",
+                "Accept": "*/*",
+            },
+            timeout=5,
+        )
+        resp.raise_for_status()
+        # JSONP 응답에서 JSON 추출: _jsonp_2({...}) → {...}
+        text = resp.text.strip()
+        match = re.search(r'_jsonp_\d+\((.+)\)\s*;?\s*$', text, re.DOTALL)
+        if not match:
+            return []
+        data = json.loads(match.group(1))
+        items = data.get("items", [])
+        if not items:
+            return []
+        first = items[0]
+        suggestions = first if (isinstance(first, list) and first and isinstance(first[0], list)) else items
+        return [s[0] for s in suggestions[:max_results] if s and s[0]]
+    except Exception as e:
+        print(f"[자동완성] '{keyword}' 오류: {e}")
+        return []
 
 
 def get_search_volumes_batch(keywords: List[str], customer_id: str, api_key: str, secret_key: str) -> Dict[str, Dict]:

@@ -90,26 +90,30 @@ def get_related_keywords(seed_keywords: List[str], customer_id: str, api_key: st
 
 
 def get_autocomplete(keyword: str, max_results: int = 10) -> List[str]:
-    """네이버 자동완성 키워드 수집 (공식 API 키 불필요)"""
-    try:
-        resp = requests.get(
-            "https://ac.search.naver.com/nx/ac",
-            params={"q": keyword, "con": "1", "frm": "nv", "ans": "2",
-                    "r_format": "json", "r_enc": "UTF-8"},
-            headers={"User-Agent": "Mozilla/5.0"},
-            timeout=5,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        items = data.get("items", [])
-        if not items:
-            return []
-        # 중첩 배열 [[["kw","0"],...]] 또는 평탄 [["kw","0"],...] 둘 다 처리
-        suggestions = items[0] if (items and isinstance(items[0], list) and items[0] and isinstance(items[0][0], list)) else items
-        return [s[0] for s in suggestions[:max_results] if s and s[0]]
-    except Exception as e:
-        print(f"[자동완성] '{keyword}' 오류: {e}")
-        return []
+    """네이버 자동완성 키워드 수집"""
+    for params in [
+        {"q": keyword, "con": "1", "frm": "nv", "ans": "2", "r_format": "json", "r_enc": "UTF-8", "r_unicode": "0", "t_koreng": "1", "run": "2", "rev": "4", "q_enc": "UTF-8", "st": "100"},
+        {"query": keyword, "type": "keyword", "count": str(max_results)},
+    ]:
+        for url in ["https://ac.search.naver.com/nx/ac", "https://suggest.naver.com/suggest"]:
+            try:
+                resp = requests.get(url, params=params,
+                                    headers={"User-Agent": "Mozilla/5.0", "Referer": "https://search.naver.com"},
+                                    timeout=5)
+                if not resp.ok:
+                    continue
+                data = resp.json()
+                items = data.get("items", [])
+                if not items:
+                    continue
+                first = items[0]
+                suggestions = first if (isinstance(first, list) and first and isinstance(first[0], list)) else items
+                result = [s[0] for s in suggestions[:max_results] if s and s[0]]
+                if result:
+                    return result
+            except Exception:
+                continue
+    return []
 
 
 def get_search_volumes_batch(keywords: List[str], customer_id: str, api_key: str, secret_key: str) -> Dict[str, Dict]:

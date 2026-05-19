@@ -66,9 +66,16 @@ with st.sidebar:
 
 # ── 뉴스 탭 ──────────────────────────────────────────────
 st.subheader("📰 카테고리별 최신 뉴스")
-탭건강, 탭부동산, 탭사업, 탭투자, 탭지원금 = st.tabs(["💊 건강", "🏠 부동산", "💼 사업", "📈 투자", "🏛️ 정부지원금"])
+탭건강, 탭부동산, 탭사업, 탭투자, 탭지원금, 탭보험, 탭대출, 탭법률, 탭세금, 탭육아, 탭여행, 탭반려 = st.tabs([
+    "💊 건강", "🏠 부동산", "💼 사업", "📈 투자", "🏛️ 정부지원금",
+    "🛡️ 보험", "💳 대출", "⚖️ 법률", "💰 세금", "👶 육아출산", "✈️ 여행", "🐾 반려동물",
+])
 
-for tab, category in [(탭건강, "건강"), (탭부동산, "부동산"), (탭사업, "사업"), (탭투자, "투자"), (탭지원금, "정부지원금")]:
+for tab, category in [
+    (탭건강, "건강"), (탭부동산, "부동산"), (탭사업, "사업"), (탭투자, "투자"), (탭지원금, "정부지원금"),
+    (탭보험, "보험"), (탭대출, "대출"), (탭법률, "법률"), (탭세금, "세금"),
+    (탭육아, "육아출산"), (탭여행, "여행"), (탭반려, "반려동물"),
+]:
     with tab:
         if st.button(f"{category} 뉴스 불러오기", key=f"load_{category}"):
             with st.spinner("뉴스 수집 중..."):
@@ -112,7 +119,10 @@ crawled_file_links = _load_crawled_links()
 
 col_cat, col_num, col_btn1, col_btn2 = st.columns([2, 1, 1, 1])
 with col_cat:
-    auto_category = st.selectbox("카테고리", ["건강", "부동산", "사업", "투자", "정부지원금"], label_visibility="collapsed")
+    auto_category = st.selectbox("카테고리", [
+        "건강", "부동산", "사업", "투자", "정부지원금",
+        "보험", "대출", "법률", "세금", "육아출산", "여행", "반려동물",
+    ], label_visibility="collapsed")
 with col_num:
     auto_target = st.number_input("찾을 키워드 수", min_value=1, value=10, step=1, label_visibility="collapsed")
 with col_btn1:

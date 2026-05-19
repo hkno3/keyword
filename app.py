@@ -52,7 +52,147 @@ for tab, category in [(탭건강, "건강"), (탭부동산, "부동산"), (탭�
 
 st.divider()
 
-# ── 사이드바 ─────────────────────────────────────────────
+# ── 자동 키워드 찾기 ─────────────────────────────────────
+st.subheader("🤖 자동 키워드 찾기")
+
+for key in ["auto_keywords", "auto_crawled", "auto_running"]:
+    if key not in st.session_state:
+        st.session_state[key] = [] if key != "auto_running" else False
+
+col_cat, col_num, col_btn1, col_btn2 = st.columns([2, 1, 1, 1])
+with col_cat:
+    auto_category = st.selectbox("카테고리", ["건강", "부동산", "사업", "투자"], label_visibility="collapsed")
+with col_num:
+    auto_target = st.number_input("찾을 키워드 수", min_value=1, value=10, step=1, label_visibility="collapsed")
+with col_btn1:
+    start_btn = st.button("🤖 자동 찾기", type="primary", use_container_width=True)
+with col_btn2:
+    stop_btn = st.button("⏹ 스탑", use_container_width=True)
+
+if stop_btn:
+    st.session_state.auto_running = False
+
+# 분석한 기사 기록 표시
+if st.session_state.auto_crawled:
+    last = st.session_state.auto_crawled[-1]
+    st.caption(f"마지막 분석 기사: [{last['pubDate']}] {last['title']}")
+
+# 수집된 키워드 표시
+if st.session_state.auto_keywords:
+    st.success(f"✅ {len(st.session_state.auto_keywords)}개 키워드 수집됨")
+    auto_df = pd.DataFrame([{
+        "키워드": r["keyword"],
+        "검색": f"https://search.naver.com/search.naver?query={r['keyword']}",
+        "월검색(합계)": f"{r['total_search']:,}",
+        "문서수": f"{r['doc_count']:,}",
+        "경쟁 강도": r["level"],
+        "추천도": r["stars"],
+        "출처 기사": r.get("source_title", ""),
+    } for r in st.session_state.auto_keywords])
+    st.dataframe(auto_df, hide_index=True, use_container_width=True,
+                 column_config={"검색": st.column_config.LinkColumn("검색", display_text="🔍 네이버")})
+
+    csv = auto_df.drop(columns=["검색"]).to_csv(index=False, encoding="utf-8-sig")
+    st.download_button("⬇️ CSV 다운로드", data=csv, file_name="자동키워드.csv", mime="text/csv")
+
+if start_btn:
+    if not groq_key:
+        st.error("Groq API 키를 입력해주세요.")
+    else:
+        st.session_state.auto_running = True
+        groq_client = Groq(api_key=groq_key)
+        customer_id = os.getenv("NAVER_AD_CUSTOMER_ID", "")
+        ad_key = os.getenv("NAVER_AD_API_KEY", "")
+        ad_secret = os.getenv("NAVER_AD_SECRET_KEY", "")
+        naver_id = os.getenv("NAVER_CLIENT_ID", "")
+        naver_secret = os.getenv("NAVER_CLIENT_SECRET", "")
+
+        # 기사 목록 (없으면 수집)
+        if not st.session_state.get(f"news_{auto_category}"):
+            with st.spinner(f"{auto_category} 기사 수집 중..."):
+                st.session_state[f"news_{auto_category}"] = news_fetcher.fetch_category_news(auto_category, max_total=1000)
+
+        articles = st.session_state[f"news_{auto_category}"]
+        crawled_links = {a["link"] for a in st.session_state.auto_crawled}
+        collected = list(st.session_state.auto_keywords)
+        collected_kws = {r["keyword"] for r in collected}
+
+        status_box = st.empty()
+        progress = st.progress(0)
+
+        for article in articles:
+            if not st.session_state.auto_running:
+                break
+            if len(collected) >= auto_target:
+                break
+            if article["link"] in crawled_links:
+                continue
+
+            status_box.info(f"🔍 [{article['pubDate']}] {article['title'][:50]}...")
+
+            # 크롤링
+            text = news_fetcher.scrape_article(article["link"])
+            st.session_state.auto_crawled.append({"link": article["link"], "pubDate": article["pubDate"], "title": article["title"]})
+            crawled_links.add(article["link"])
+
+            if not text:
+                continue
+
+            # AI 씨드 추출
+            try:
+                seeds = claude_service.extract_seed_keywords(text, groq_client)
+                seeds = [s for s in seeds if len(s.strip()) >= 2]
+            except Exception:
+                continue
+
+            if not seeds:
+                continue
+
+            # 자동완성
+            autocomplete_kws = []
+            for seed in seeds:
+                ac = naver_api.get_autocomplete(seed)
+                autocomplete_kws.extend(ac)
+            autocomplete_kws = list(dict.fromkeys(autocomplete_kws))
+
+            if not autocomplete_kws:
+                autocomplete_kws = seeds
+
+            # 검색량 조회
+            related = naver_api.get_search_volumes_batch(autocomplete_kws, customer_id, ad_key, ad_secret)
+            to_lookup = {k: v for k, v in related.items() if v["total_search"] >= 2000}
+
+            if not to_lookup:
+                continue
+
+            # 문서수 조회
+            doc_counts = naver_api.get_doc_counts_parallel(list(to_lookup.keys()), naver_id, naver_secret)
+            table = naver_api.build_keyword_table(to_lookup, doc_counts)
+
+            # 별 3개 이상 + 클릭률 1% 이상 + 중복 제거
+            for r in table:
+                if len(collected) >= auto_target:
+                    break
+                if r["stars"] in ("⭐⭐⭐", "⭐⭐⭐⭐", "⭐⭐⭐⭐⭐") and \
+                   (r["pc_ctr"] >= 1 or r["mobile_ctr"] >= 1) and \
+                   r["keyword"] not in collected_kws:
+                    r["source_title"] = article["title"]
+                    collected.append(r)
+                    collected_kws.add(r["keyword"])
+
+            st.session_state.auto_keywords = collected
+            progress.progress(min(len(collected) / auto_target, 1.0))
+
+        st.session_state.auto_running = False
+        status_box.empty()
+        progress.empty()
+        if len(collected) >= auto_target:
+            st.success(f"🎉 키워드 {len(collected)}개 수집 완료!")
+        else:
+            st.warning(f"기사를 다 돌았어요. {len(collected)}개 수집됨.")
+        st.rerun()
+
+st.divider()
 with st.sidebar:
     st.header("⚙️ API 설정")
     groq_key = st.text_input(

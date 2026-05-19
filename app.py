@@ -143,6 +143,7 @@ def _render_auto_table(keywords):
         "클릭_모바일": f"{r['mobile_click']:,}",
         "클릭률_PC": f"{r['pc_ctr']}%",
         "클릭률_모바일": f"{r['mobile_ctr']}%",
+        "경쟁정도(AD)": r.get("comp_idx", "N/A"),
         "문서수": f"{r['doc_count']:,}",
         "경쟁 강도": r["level"],
         "추천도": r["stars"],
@@ -151,8 +152,7 @@ def _render_auto_table(keywords):
         st.success(f"✅ {len(keywords)}개 키워드 수집됨")
         st.dataframe(auto_df, hide_index=True, use_container_width=True,
                      column_config={"검색": st.column_config.LinkColumn("검색", display_text="🔍 네이버")})
-        export_df = auto_df.drop(columns=["검색"])
-        tsv = export_df.to_csv(sep="\t", index=False).replace("`", "'").replace("\\", "\\\\")
+        tsv = auto_df.to_csv(sep="\t", index=False).replace("`", "'").replace("\\", "\\\\")
         components.html(f"""
 <button onclick="navigator.clipboard.writeText(`{tsv}`).then(()=>{{this.textContent='✅ 복사됨!';setTimeout(()=>this.textContent='📋 표 복사 (엑셀 붙여넣기용)',2000)}}).catch(()=>alert('복사 실패'))">📋 표 복사 (엑셀 붙여넣기용)</button>
 <style>button{{padding:8px 20px;background:#ff4b4b;color:white;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-family:sans-serif}}</style>

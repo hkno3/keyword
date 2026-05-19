@@ -15,6 +15,31 @@ st.set_page_config(page_title="수익형 키워드 분석기", page_icon="🔍",
 st.title("🔍 수익형 키워드 분석기")
 st.caption("뉴스 기사를 붙여넣으면 경쟁 낮은 블로그 키워드를 자동으로 찾아줍니다")
 
+# ── 사이드바 ─────────────────────────────────────────────
+with st.sidebar:
+    st.header("⚙️ API 설정")
+    groq_key = st.text_input(
+        "Groq API Key",
+        value=os.getenv("GROQ_API_KEY", ""),
+        type="password",
+        help="https://console.groq.com 에서 발급 (무료)",
+    )
+    st.divider()
+    naver_ok = bool(os.getenv("NAVER_AD_API_KEY")) and bool(os.getenv("NAVER_CLIENT_ID"))
+    if naver_ok:
+        st.success("✅ 네이버 API 연결됨")
+    else:
+        st.error("❌ 네이버 API 키 없음")
+    st.divider()
+    st.markdown(
+        "**경쟁 강도 기준** (문서수 ÷ 검색량)\n"
+        "- ⭐⭐⭐⭐⭐ 매우 낮음 `< 0.5`\n"
+        "- ⭐⭐⭐⭐ 낮음 `0.5~1`\n"
+        "- ⭐⭐⭐ 보통 `1~3`\n"
+        "- ⭐⭐ 높음 `3~10`\n"
+        "- ⭐ 매우 높음 `> 10`"
+    )
+
 # ── 뉴스 탭 ──────────────────────────────────────────────
 st.subheader("📰 카테고리별 최신 뉴스")
 탭건강, 탭부동산, 탭사업, 탭투자 = st.tabs(["💊 건강", "🏠 부동산", "💼 사업", "📈 투자"])
@@ -191,31 +216,6 @@ if start_btn:
         else:
             st.warning(f"기사를 다 돌았어요. {len(collected)}개 수집됨.")
         st.rerun()
-
-st.divider()
-with st.sidebar:
-    st.header("⚙️ API 설정")
-    groq_key = st.text_input(
-        "Groq API Key",
-        value=os.getenv("GROQ_API_KEY", ""),
-        type="password",
-        help="https://console.groq.com 에서 발급 (무료)",
-    )
-    st.divider()
-    naver_ok = bool(os.getenv("NAVER_AD_API_KEY")) and bool(os.getenv("NAVER_CLIENT_ID"))
-    if naver_ok:
-        st.success("✅ 네이버 API 연결됨")
-    else:
-        st.error("❌ 네이버 API 키 없음")
-    st.divider()
-    st.markdown(
-        "**경쟁 강도 기준** (문서수 ÷ 검색량)\n"
-        "- ⭐⭐⭐⭐⭐ 매우 낮음 `< 0.5`\n"
-        "- ⭐⭐⭐⭐ 낮음 `0.5~1`\n"
-        "- ⭐⭐⭐ 보통 `1~3`\n"
-        "- ⭐⭐ 높음 `3~10`\n"
-        "- ⭐ 매우 높음 `> 10`"
-    )
 
 # ── 세션 초기화 ───────────────────────────────────────────
 for key in ["keyword_table", "selected_kw", "titles"]:

@@ -102,23 +102,33 @@ if st.session_state.auto_crawled:
     last = st.session_state.auto_crawled[-1]
     st.caption(f"마지막 분석 기사: [{last['pubDate']}] {last['title']}")
 
-# 수집된 키워드 표시
-if st.session_state.auto_keywords:
-    st.success(f"✅ {len(st.session_state.auto_keywords)}개 키워드 수집됨")
+auto_table_box = st.empty()
+
+def _render_auto_table(keywords):
+    if not keywords:
+        return
     auto_df = pd.DataFrame([{
         "키워드": r["keyword"],
         "검색": f"https://search.naver.com/search.naver?query={r['keyword']}",
+        "검색_PC": f"{r['pc_search']:,}",
+        "검색_모바일": f"{r['mobile_search']:,}",
         "월검색(합계)": f"{r['total_search']:,}",
+        "클릭_PC": f"{r['pc_click']:,}",
+        "클릭_모바일": f"{r['mobile_click']:,}",
+        "클릭률_PC": f"{r['pc_ctr']}%",
+        "클릭률_모바일": f"{r['mobile_ctr']}%",
         "문서수": f"{r['doc_count']:,}",
         "경쟁 강도": r["level"],
         "추천도": r["stars"],
-        "출처 기사": r.get("source_title", ""),
-    } for r in st.session_state.auto_keywords])
-    st.dataframe(auto_df, hide_index=True, use_container_width=True,
-                 column_config={"검색": st.column_config.LinkColumn("검색", display_text="🔍 네이버")})
+    } for r in keywords])
+    with auto_table_box.container():
+        st.success(f"✅ {len(keywords)}개 키워드 수집됨")
+        st.dataframe(auto_df, hide_index=True, use_container_width=True,
+                     column_config={"검색": st.column_config.LinkColumn("검색", display_text="🔍 네이버")})
+        csv = auto_df.drop(columns=["검색"]).to_csv(index=False, encoding="utf-8-sig")
+        st.download_button("⬇️ CSV 다운로드", data=csv, file_name="자동키워드.csv", mime="text/csv", key="auto_csv")
 
-    csv = auto_df.drop(columns=["검색"]).to_csv(index=False, encoding="utf-8-sig")
-    st.download_button("⬇️ CSV 다운로드", data=csv, file_name="자동키워드.csv", mime="text/csv")
+_render_auto_table(st.session_state.auto_keywords)
 
 if start_btn:
     if not groq_key:
@@ -207,6 +217,7 @@ if start_btn:
 
             st.session_state.auto_keywords = collected
             progress.progress(min(len(collected) / auto_target, 1.0))
+            _render_auto_table(collected)
 
         st.session_state.auto_running = False
         status_box.empty()

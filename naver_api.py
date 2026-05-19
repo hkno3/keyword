@@ -102,10 +102,13 @@ def get_autocomplete(keyword: str, max_results: int = 10) -> List[str]:
         resp.raise_for_status()
         data = resp.json()
         items = data.get("items", [])
-        if items and isinstance(items[0], list):
-            return [item[0] for item in items[0][:max_results] if item]
-        return []
-    except Exception:
+        if not items:
+            return []
+        # 중첩 배열 [[["kw","0"],...]] 또는 평탄 [["kw","0"],...] 둘 다 처리
+        suggestions = items[0] if (items and isinstance(items[0], list) and items[0] and isinstance(items[0][0], list)) else items
+        return [s[0] for s in suggestions[:max_results] if s and s[0]]
+    except Exception as e:
+        print(f"[자동완성] '{keyword}' 오류: {e}")
         return []
 
 

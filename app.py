@@ -134,9 +134,13 @@ if st.button("🚀 키워드 분석 시작", type="primary", use_container_width
         autocomplete_kws = []
         for seed in seeds:
             ac = naver_api.get_autocomplete(seed)
+            st.write(f"  · {seed} → {len(ac)}개: {', '.join(ac)}" if ac else f"  · {seed} → 자동완성 없음")
             autocomplete_kws.extend(ac)
         autocomplete_kws = list(dict.fromkeys(autocomplete_kws))
-        st.write(f"✅ 자동완성 키워드 {len(autocomplete_kws)}개 수집: {', '.join(autocomplete_kws[:10])}{'...' if len(autocomplete_kws) > 10 else ''}")
+        if not autocomplete_kws:
+            st.error("자동완성 키워드를 가져오지 못했어요. 잠시 후 다시 시도해주세요.")
+            st.stop()
+        st.write(f"✅ 자동완성 키워드 총 {len(autocomplete_kws)}개")
 
         st.write(f"📈 검색량 조회 중... ({len(autocomplete_kws)}개)")
         related = naver_api.get_search_volumes_batch(autocomplete_kws, customer_id, ad_key, ad_secret)

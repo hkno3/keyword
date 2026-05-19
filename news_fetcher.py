@@ -128,7 +128,7 @@ def _search_news(query: str, display: int = 100) -> list[dict]:
         return []
 
 
-def fetch_category_news(category: str, max_total: int = 500) -> list[dict]:
+def fetch_category_news(category: str, max_total: int = 1000) -> list[dict]:
     queries = CATEGORY_QUERIES.get(category, [])
     seen = set()
     results = []

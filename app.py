@@ -176,7 +176,6 @@ if st.session_state.keyword_table:
         r for r in table
         if r["total_search"] >= min_search
         and (max_doc == 0 or r["doc_count"] <= max_doc)
-        and r["stars"] in ("⭐⭐⭐⭐", "⭐⭐⭐⭐⭐")
         and (r["pc_ctr"] >= 1 or r["mobile_ctr"] >= 1)
     ]
 

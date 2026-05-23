@@ -298,6 +298,9 @@ col_a, col_b = st.columns(2)
 with col_a:
     min_search_pre = st.number_input("문서수 조회 최소 검색량 (API 절약)", min_value=0, value=2000, step=100,
                                      help="이 검색량 이상인 키워드만 블로그 문서수를 조회합니다")
+with col_b:
+    min_stars_pre = st.number_input("최소 별 개수 (1~5)", min_value=1, max_value=5, value=3, step=1,
+                                    help="이 별 개수 이상인 키워드만 결과에 표시합니다")
 
 if st.button("🚀 키워드 분석 시작", type="primary", use_container_width=True):
     if not article.strip() and not manual_keywords.strip():
@@ -360,6 +363,7 @@ if st.button("🚀 키워드 분석 시작", type="primary", use_container_width
         table = naver_api.build_keyword_table(to_lookup, doc_counts)
         st.session_state.keyword_table = table
         st.session_state.min_search_pre = min_search_pre
+        st.session_state.min_stars_pre = min_stars_pre
         st.session_state.selected_kw = None
         st.session_state.titles = None
         status.update(label=f"✅ 완료! 키워드 {len(table)}개 분석됨", state="complete")
@@ -383,7 +387,7 @@ if st.session_state.keyword_table:
     with col2:
         max_doc = st.number_input("최대 문서수 (0=제한없음)", min_value=0, value=0, step=1000)
     with col3:
-        min_stars = st.number_input("최소 별 개수 (1~5)", min_value=1, max_value=5, value=3, step=1)
+        min_stars = st.number_input("최소 별 개수 (1~5)", min_value=1, max_value=5, value=st.session_state.get("min_stars_pre", 3), step=1)
 
     all_stars = ["⭐", "⭐⭐", "⭐⭐⭐", "⭐⭐⭐⭐", "⭐⭐⭐⭐⭐"]
     valid_stars = set(all_stars[min_stars - 1:])

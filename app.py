@@ -11,12 +11,25 @@ from groq import Groq
 import naver_api
 import claude_service
 import news_fetcher
+import wp_service
 
 load_dotenv()
 
 CRAWLED_FILE = os.path.join(os.path.dirname(__file__), "crawled_links.json")
 KEYWORDS_HISTORY_FILE = os.path.join(os.path.dirname(__file__), "keywords_history.json")
 GROQ_USAGE_FILE = os.path.join(os.path.dirname(__file__), "groq_usage.json")
+WP_SITES_FILE = os.path.join(os.path.dirname(__file__), "wp_sites.json")
+
+def _load_wp_sites() -> list:
+    try:
+        with open(WP_SITES_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+def _save_wp_sites(sites: list):
+    with open(WP_SITES_FILE, "w", encoding="utf-8") as f:
+        json.dump(sites, f, ensure_ascii=False, indent=2)
 
 def _load_groq_usage() -> dict:
     today = datetime.now().strftime("%Y-%m-%d")
@@ -137,6 +150,50 @@ with st.sidebar:
             os.remove(KEYWORDS_HISTORY_FILE)
         st.session_state.keywords_history = {}
         st.rerun()
+    st.divider()
+    st.markdown("**🌐 WordPress 사이트**")
+    wp_sites = _load_wp_sites()
+    if wp_sites:
+        for i, site in enumerate(wp_sites):
+            col_name, col_test, col_del = st.columns([4, 1, 1])
+            with col_name:
+                st.caption(f"**{site['name']}**  \n{site['url']}")
+            with col_test:
+                if st.button("🔌", key=f"wp_test_{i}", help="연결 테스트"):
+                    with st.spinner("테스트 중..."):
+                        ok, msg = wp_service.test_connection(site)
+                    if ok:
+                        st.success(f"✅ {msg}")
+                    else:
+                        st.error(f"❌ {msg}")
+            with col_del:
+                if st.button("🗑️", key=f"wp_del_{i}", help="삭제"):
+                    wp_sites.pop(i)
+                    _save_wp_sites(wp_sites)
+                    st.rerun()
+    else:
+        st.caption("등록된 사이트 없음")
+    with st.expander("➕ 사이트 추가"):
+        with st.form("wp_add_form"):
+            wp_name = st.text_input("사이트명", placeholder="예: bodyandwell")
+            wp_url = st.text_input("URL", placeholder="https://bodyandwell.com")
+            wp_user = st.text_input("아이디(이메일)")
+            wp_pass = st.text_input("앱 비밀번호", type="password",
+                                    help="WordPress 관리자 > 프로필 > 애플리케이션 비밀번호에서 생성")
+            if st.form_submit_button("저장", use_container_width=True):
+                if wp_name and wp_url and wp_user and wp_pass:
+                    sites = _load_wp_sites()
+                    sites.append({
+                        "name": wp_name,
+                        "url": wp_url.rstrip("/"),
+                        "username": wp_user,
+                        "app_password": wp_pass,
+                    })
+                    _save_wp_sites(sites)
+                    st.success(f"✅ {wp_name} 저장됨")
+                    st.rerun()
+                else:
+                    st.error("모든 항목을 입력해주세요.")
     st.divider()
     st.markdown(
         "**경쟁 강도 기준** (문서수 ÷ 검색량)\n"

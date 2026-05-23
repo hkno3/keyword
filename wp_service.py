@@ -23,8 +23,11 @@ def _get_or_create_tag(site: dict, name: str, auth: HTTPBasicAuth) -> int | None
     return r.json().get("id") if r.status_code == 201 else None
 
 
-def publish_post(site: dict, post_data: dict, pub_status: str = "draft") -> dict:
-    """WordPress REST API로 포스트 발행. pub_status: 'draft' | 'publish'"""
+def publish_post(site: dict, post_data: dict, pub_status: str = "draft", scheduled_date: str = "") -> dict:
+    """WordPress REST API로 포스트 발행.
+    pub_status: 'draft' | 'publish' | 'future'
+    scheduled_date: ISO 8601 형식 (예: '2026-05-24T09:00:00'), pub_status='future'일 때 필수
+    """
     auth = HTTPBasicAuth(site["username"], site["app_password"])
     base = site["url"].rstrip("/")
 
@@ -45,6 +48,10 @@ def publish_post(site: dict, post_data: dict, pub_status: str = "draft") -> dict
             "rank_math_description": post_data.get("meta_description", ""),
         },
     }
+
+    if scheduled_date:
+        payload["date"] = scheduled_date
+        payload["status"] = "future"
 
     r = requests.post(f"{base}/wp-json/wp/v2/posts", json=payload, auth=auth, timeout=30)
     r.raise_for_status()

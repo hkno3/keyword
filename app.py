@@ -95,6 +95,18 @@ with st.sidebar:
             os.remove(CRAWLED_FILE)
         st.session_state.auto_crawled = []
         st.rerun()
+    st.divider()
+    st.markdown("**🤖 Groq 사용량 (이번 세션)**")
+    groq_tokens = st.session_state.get("groq_tokens", 0)
+    groq_pct = min(groq_tokens / 100000, 1.0)
+    st.progress(groq_pct)
+    st.caption(f"{groq_tokens:,} / 100,000 토큰 ({groq_pct*100:.1f}%)")
+    used_key = st.session_state.get("groq_key_idx", 0) + 1
+    st.caption(f"현재 Key {used_key} 사용 중")
+    st.markdown("**🔍 네이버 API 호출 (이번 세션)**")
+    st.caption(f"검색광고: {st.session_state.get('naver_ad_calls', 0):,}회")
+    st.caption(f"검색(문서수): {st.session_state.get('naver_search_calls', 0):,}회")
+    st.divider()
     history = _load_keywords_history()
     used_total = sum(1 for kw in history.values() for t in kw["titles"] if t["used"])
     unused_total = sum(1 for kw in history.values() for t in kw["titles"] if not t["used"])
@@ -228,7 +240,8 @@ def _generate_and_save_titles(groq_client):
         kw = row["keyword"]
         title_status.info(f"✍️ 제목 생성 중: {kw} ({i+1}/{len(to_generate)})")
         try:
-            titles, recommended = claude_service.generate_titles(kw, groq_client)
+            titles, recommended, tokens = claude_service.generate_titles(kw, groq_client)
+            st.session_state.groq_tokens = st.session_state.get("groq_tokens", 0) + tokens
             history[kw] = {
                 "first_found": today,
                 "titles": [
@@ -258,6 +271,9 @@ for key in ["auto_keywords", "auto_crawled", "auto_running"]:
         st.session_state[key] = [] if key != "auto_running" else False
 if "keywords_history" not in st.session_state:
     st.session_state.keywords_history = _load_keywords_history()
+for key in ["groq_tokens", "naver_ad_calls", "naver_search_calls"]:
+    if key not in st.session_state:
+        st.session_state[key] = 0
 
 crawled_file_links = _load_crawled_links()
 
@@ -370,7 +386,9 @@ if start_btn:
 
             # AI 씨드 추출
             try:
-                seeds = claude_service.extract_seed_keywords(text, groq_client)
+                seeds, tokens = claude_service.extract_seed_keywords(text, groq_client)
+                st.session_state.groq_tokens += tokens
+                st.session_state.groq_key_idx = groq_key_idx
                 seeds = [s for s in seeds if len(s.strip()) >= 2]
             except Exception as e:
                 err_str = str(e)
@@ -378,9 +396,11 @@ if start_btn:
                     groq_key_idx += 1
                     if groq_key_idx < len(groq_keys):
                         groq_client = Groq(api_key=groq_keys[groq_key_idx])
+                        st.session_state.groq_key_idx = groq_key_idx
                         status_box.warning(f"⚠️ Key {groq_key_idx} 한도 초과 → Key {groq_key_idx + 1}로 전환")
                         try:
-                            seeds = claude_service.extract_seed_keywords(text, groq_client)
+                            seeds, tokens = claude_service.extract_seed_keywords(text, groq_client)
+                            st.session_state.groq_tokens += tokens
                             seeds = [s for s in seeds if len(s.strip()) >= 2]
                         except Exception:
                             continue
@@ -410,6 +430,7 @@ if start_btn:
 
             # 검색량 조회
             related = naver_api.get_search_volumes_batch(autocomplete_kws, customer_id, ad_key, ad_secret)
+            st.session_state.naver_ad_calls += len(autocomplete_kws)
             to_lookup = {k: v for k, v in related.items() if v["total_search"] >= 2000}
 
             if not to_lookup:
@@ -418,6 +439,7 @@ if start_btn:
 
             # 문서수 조회
             doc_counts = naver_api.get_doc_counts_parallel(list(to_lookup.keys()), naver_id, naver_secret)
+            st.session_state.naver_search_calls += len(to_lookup)
             table = naver_api.build_keyword_table(to_lookup, doc_counts)
 
             # 최소 별 개수 + 클릭률 1% 이상 + 중복 제거
@@ -617,7 +639,8 @@ if st.button("🚀 키워드 분석 시작", type="primary", use_container_width
 
         if article.strip():
             st.write("📝 씨드 키워드 추출 중...")
-            seeds = claude_service.extract_seed_keywords(article, groq_client)
+            seeds, tokens = claude_service.extract_seed_keywords(article, groq_client)
+            st.session_state.groq_tokens = st.session_state.get("groq_tokens", 0) + tokens
         else:
             seeds = []
 
@@ -733,7 +756,8 @@ if st.session_state.keyword_table:
             else:
                 groq_client = Groq(api_key=groq_key)
                 with st.spinner("제목 생성 중..."):
-                    titles, recommended = claude_service.generate_titles(selected, groq_client)
+                    titles, recommended, tokens = claude_service.generate_titles(selected, groq_client)
+                    st.session_state.groq_tokens = st.session_state.get("groq_tokens", 0) + tokens
                 kw_data = next(r for r in filtered if r["keyword"] == selected)
                 st.session_state.titles = {
                     "keyword": selected,

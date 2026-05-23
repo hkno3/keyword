@@ -868,7 +868,7 @@ used_titles = [
 
 if used_titles:
     st.markdown("**📌 작성할 제목 목록**")
-    for item in used_titles:
+    for ui, item in enumerate(used_titles):
         col1, col2 = st.columns([8, 2])
         with col1:
             st.success(f"**{item['title']}**")
@@ -876,7 +876,7 @@ if used_titles:
         with col2:
             st.write("")
             st.write("")
-            if st.button("↩️ 취소", key=f"cancel_{item['keyword']}_{item['title'][:10]}"):
+            if st.button("↩️ 취소", key=f"cancel_{ui}_{item['keyword']}"):
                 _unmark_title_used(item["keyword"], item["title"])
                 st.session_state.keywords_history = _load_keywords_history()
                 st.rerun()

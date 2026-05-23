@@ -20,6 +20,18 @@ CRAWLED_FILE = os.path.join(os.path.dirname(__file__), "crawled_links.json")
 KEYWORDS_HISTORY_FILE = os.path.join(os.path.dirname(__file__), "keywords_history.json")
 GROQ_USAGE_FILE = os.path.join(os.path.dirname(__file__), "groq_usage.json")
 WP_SITES_FILE = os.path.join(os.path.dirname(__file__), "wp_sites.json")
+SITEMAP_SOURCES_FILE = os.path.join(os.path.dirname(__file__), "sitemap_sources.json")
+
+def _load_sitemap_sources() -> list:
+    try:
+        with open(SITEMAP_SOURCES_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+def _save_sitemap_sources(sources: list):
+    with open(SITEMAP_SOURCES_FILE, "w", encoding="utf-8") as f:
+        json.dump(sources, f, ensure_ascii=False, indent=2)
 
 def _load_wp_sites() -> list:
     try:
@@ -152,27 +164,57 @@ with st.sidebar:
         st.session_state.keywords_history = {}
         st.rerun()
     st.divider()
-    st.markdown("**🗺️ 사이트맵 캐시**")
+    st.markdown("**🗺️ 사이트맵**")
+    sm_sources = _load_sitemap_sources()
     cached_urls = sitemap_service.load_cache()
-    st.caption(f"저장된 URL: {len(cached_urls)}개")
-    with st.expander("🔄 Google Sheets에서 불러오기"):
-        sheets_url = st.text_input(
-            "Sheets URL",
-            placeholder="https://docs.google.com/spreadsheets/d/...",
-            key="sitemap_sheets_url",
-            label_visibility="collapsed",
-        )
-        if st.button("불러오기", use_container_width=True, key="sitemap_load_btn"):
-            if sheets_url.strip():
+    st.caption(f"캐시: {len(cached_urls)}개 URL | 소스: {len(sm_sources)}개")
+    for i, src in enumerate(sm_sources):
+        c1, c2, c3 = st.columns([4, 1, 1])
+        with c1:
+            st.caption(f"**{src['name']}**")
+        with c2:
+            if st.button("🔄", key=f"sm_reload_{i}", help="이 시트만 업데이트"):
                 with st.spinner("불러오는 중..."):
-                    urls, err = sitemap_service.load_from_sheets(sheets_url.strip())
+                    urls, err = sitemap_service.load_from_sheets(src["url"])
                 if err:
                     st.error(f"❌ {err}")
                 else:
-                    st.success(f"✅ {len(urls)}개 URL 저장됨")
+                    # 기존 캐시에 병합
+                    existing = sitemap_service.load_cache()
+                    merged = list(dict.fromkeys(existing + urls))
+                    sitemap_service.save_cache(merged)
+                    st.success(f"✅ {len(urls)}개")
                     st.rerun()
-            else:
-                st.error("URL을 입력해주세요.")
+        with c3:
+            if st.button("🗑️", key=f"sm_del_{i}"):
+                sm_sources.pop(i)
+                _save_sitemap_sources(sm_sources)
+                st.rerun()
+    if sm_sources:
+        if st.button("🔄 전체 업데이트", use_container_width=True, key="sm_reload_all"):
+            all_urls = []
+            for src in sm_sources:
+                with st.spinner(f"{src['name']} 불러오는 중..."):
+                    urls, err = sitemap_service.load_from_sheets(src["url"])
+                if not err:
+                    all_urls.extend(urls)
+            merged = list(dict.fromkeys(all_urls))
+            sitemap_service.save_cache(merged)
+            st.success(f"✅ 총 {len(merged)}개 URL 저장됨")
+            st.rerun()
+    with st.expander("➕ 사이트맵 추가"):
+        with st.form("sm_add_form"):
+            sm_name = st.text_input("사이트명", placeholder="예: bodyandwell")
+            sm_url = st.text_input("Google Sheets URL", placeholder="https://docs.google.com/spreadsheets/d/...")
+            if st.form_submit_button("저장", use_container_width=True):
+                if sm_name and sm_url:
+                    sm_sources = _load_sitemap_sources()
+                    sm_sources.append({"name": sm_name, "url": sm_url.strip()})
+                    _save_sitemap_sources(sm_sources)
+                    st.success(f"✅ {sm_name} 추가됨")
+                    st.rerun()
+                else:
+                    st.error("모든 항목을 입력해주세요.")
     st.divider()
     st.markdown("**🌐 WordPress 사이트**")
     wp_sites = _load_wp_sites()
@@ -607,11 +649,17 @@ auto_lt_btn = st.button("⭐ 황금 키워드로 롱테일 찾기", use_containe
 if auto_lt_btn:
     seed_kws = [r["keyword"] for r in st.session_state.auto_keywords]
     _run_longtail(seed_kws)
+    if st.session_state.get("longtail_table") and groq_key:
+        _generate_and_save_titles(Groq(api_key=groq_keys[st.session_state.get("groq_key_idx", 0)]))
+    st.rerun()
 
 if direct_lt_btn:
     if direct_lt_input.strip():
         seed_kws = [k.strip() for k in direct_lt_input.split(",") if k.strip()]
         _run_longtail(seed_kws)
+        if st.session_state.get("longtail_table") and groq_key:
+            _generate_and_save_titles(Groq(api_key=groq_keys[st.session_state.get("groq_key_idx", 0)]))
+        st.rerun()
     else:
         st.warning("키워드를 입력해주세요.")
 

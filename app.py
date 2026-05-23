@@ -20,6 +20,7 @@ load_dotenv()
 CRAWLED_FILE = os.path.join(os.path.dirname(__file__), "crawled_links.json")
 KEYWORDS_HISTORY_FILE = os.path.join(os.path.dirname(__file__), "keywords_history.json")
 GROQ_USAGE_FILE = os.path.join(os.path.dirname(__file__), "groq_usage.json")
+GEMINI_USAGE_FILE = os.path.join(os.path.dirname(__file__), "gemini_usage.json")
 WP_SITES_FILE = os.path.join(os.path.dirname(__file__), "wp_sites.json")
 SITEMAP_SOURCES_FILE = os.path.join(os.path.dirname(__file__), "sitemap_sources.json")
 
@@ -64,6 +65,23 @@ def _save_groq_usage(tokens: int):
 def _add_groq_tokens(n: int):
     st.session_state.groq_tokens = st.session_state.get("groq_tokens", 0) + n
     _save_groq_usage(st.session_state.groq_tokens)
+
+def _load_gemini_usage() -> dict:
+    today = datetime.now().strftime("%Y-%m-%d")
+    try:
+        with open(GEMINI_USAGE_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if data.get("date") != today:
+            return {"date": today, "calls": 0}
+        return data
+    except Exception:
+        return {"date": today, "calls": 0}
+
+def _add_gemini_call():
+    today = datetime.now().strftime("%Y-%m-%d")
+    st.session_state.gemini_calls = st.session_state.get("gemini_calls", 0) + 1
+    with open(GEMINI_USAGE_FILE, "w", encoding="utf-8") as f:
+        json.dump({"date": today, "calls": st.session_state.gemini_calls}, f)
 
 def _load_keywords_history() -> dict:
     try:
@@ -163,6 +181,13 @@ with st.sidebar:
     st.caption(f"{groq_tokens:,} / 100,000 토큰 ({groq_pct*100:.1f}%)")
     used_key = st.session_state.get("groq_key_idx", 0) + 1
     st.caption(f"현재 Key {used_key} 사용 중")
+    st.markdown(f"**✨ Gemini 사용량 (오늘 {datetime.now().strftime('%m/%d')})**")
+    gemini_calls = st.session_state.get("gemini_calls", 0)
+    gemini_pct = min(gemini_calls / 20, 1.0)
+    st.progress(gemini_pct)
+    st.caption(f"{gemini_calls} / 20회 ({gemini_pct*100:.0f}%)")
+    gemini_key_used = st.session_state.get("gemini_key_used", "1")
+    st.caption(f"현재 Key {gemini_key_used} 사용 중")
     st.markdown("**🔍 네이버 API 호출 (이번 세션)**")
     st.caption(f"검색광고: {st.session_state.get('naver_ad_calls', 0):,}회")
     st.caption(f"검색(문서수): {st.session_state.get('naver_search_calls', 0):,}회")
@@ -503,6 +528,10 @@ if "keywords_history" not in st.session_state:
     st.session_state.keywords_history = _load_keywords_history()
 if "groq_tokens" not in st.session_state:
     st.session_state.groq_tokens = _load_groq_usage()["tokens"]
+if "gemini_calls" not in st.session_state:
+    st.session_state.gemini_calls = _load_gemini_usage()["calls"]
+if "gemini_key_used" not in st.session_state:
+    st.session_state.gemini_key_used = "1"
 for key in ["naver_ad_calls", "naver_search_calls"]:
     if key not in st.session_state:
         st.session_state[key] = 0
@@ -977,6 +1006,8 @@ if st.session_state.blog_gen_target:
                     )
                     if post_data:
                         st.session_state.blog_gen_result = post_data
+                        st.session_state.gemini_key_used = used_key
+                        _add_gemini_call()
                         st.success(f"✅ 글 생성 완료! (Gemini Key {used_key} 사용)")
                     else:
                         st.error("❌ JSON 파싱 실패. 다시 시도해보세요.")

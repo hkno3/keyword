@@ -161,7 +161,8 @@ JSON 외 다른 텍스트는 절대 출력하지 마세요.
 - CSS 스타일 속성 금지 (인라인 style 포함)
 - <a> 태그는 입력값(internal_links, related_posts)으로 제공된 URL에만 사용 가능
 - 입력값에 없는 URL을 <a> 태그로 직접 생성 절대 금지
-- JSON 문자열 내 쌍따옴표는 \" 이스케이프 처리
+- HTML 속성값은 반드시 작은따옴표 사용: href='url' (쌍따옴표 href="url" 절대 금지)
+- JSON 문자열 내 줄바꿈은 \n으로 표현
 
 ▶ 링크 처리 원칙
 - 위키백과 링크 삽입 금지
@@ -201,31 +202,43 @@ JSON 외 다른 텍스트는 절대 출력하지 마세요.
 - 광고성 키워드 금지 (최고·무료·추천·1위·최신 등)
 - 제목의 숫자와 본문 H2 개수 반드시 일치"""
 
-    response = client.chat.completions.create(
-        model=MODEL,
-        max_tokens=3000,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    tokens = response.usage.total_tokens if response.usage else 0
-    text = response.choices[0].message.content.strip()
+    def _do_request(p: str) -> tuple[str, int]:
+        r = client.chat.completions.create(
+            model=MODEL,
+            max_tokens=4000,
+            messages=[{"role": "user", "content": p}],
+        )
+        t = r.usage.total_tokens if r.usage else 0
+        return r.choices[0].message.content.strip(), t
 
-    # JSON 파싱 시도 1: content 키 포함 객체
-    match = re.search(r'\{.*?"content".*?\}', text, re.DOTALL)
-    if match:
+    def _parse(text: str) -> dict | None:
+        # 마크다운 코드블록 제거
+        text = re.sub(r"```(?:json)?\s*|\s*```", "", text).strip()
+        # 시도 1: 직접 파싱
         try:
-            return json.loads(match.group()), tokens
+            return json.loads(text)
         except json.JSONDecodeError:
             pass
+        # 시도 2: 첫 { ~ 마지막 }
+        try:
+            s = text.index("{")
+            e = text.rindex("}") + 1
+            return json.loads(text[s:e])
+        except (ValueError, json.JSONDecodeError):
+            pass
+        return None
 
-    # JSON 파싱 시도 2: 첫 { ~ 마지막 }
-    try:
-        start = text.index('{')
-        end = text.rindex('}') + 1
-        return json.loads(text[start:end]), tokens
-    except (ValueError, json.JSONDecodeError):
-        pass
+    text, tokens = _do_request(prompt)
+    result = _parse(text)
 
-    return {}, tokens
+    # 파싱 실패 시 1회 재시도 (더 명확한 지시 추가)
+    if result is None:
+        retry_prompt = prompt + "\n\n[중요] 반드시 유효한 JSON만 출력하세요. HTML 속성값은 작은따옴표(')만 사용하세요."
+        text2, tokens2 = _do_request(retry_prompt)
+        tokens += tokens2
+        result = _parse(text2)
+
+    return result or {}, tokens
 
 
 

@@ -10,6 +10,7 @@ from groq import Groq
 
 import naver_api
 import claude_service
+import gemini_service
 import news_fetcher
 import wp_service
 import sitemap_service
@@ -126,6 +127,18 @@ with st.sidebar:
     groq_key2 = st.text_input(
         "Groq API Key 2 (한도 초과 시 자동 전환)",
         value=os.getenv("GROQ_API_KEY2", ""),
+        type="password",
+    )
+    st.divider()
+    gemini_key1 = st.text_input(
+        "Gemini API Key 1",
+        value=os.getenv("GEMINI_API_KEY_1", ""),
+        type="password",
+        help="Google AI Studio에서 발급 (무료)",
+    )
+    gemini_key2 = st.text_input(
+        "Gemini API Key 2 (한도 초과 시 자동 전환)",
+        value=os.getenv("GEMINI_API_KEY_2", ""),
         type="password",
     )
     st.divider()
@@ -497,6 +510,8 @@ if "blog_gen_target" not in st.session_state:
     st.session_state.blog_gen_target = None
 if "blog_gen_result" not in st.session_state:
     st.session_state.blog_gen_result = None
+if "show_schedule_picker" not in st.session_state:
+    st.session_state.show_schedule_picker = False
 if "title_gen_msg" not in st.session_state:
     st.session_state.title_gen_msg = None
 
@@ -885,14 +900,12 @@ else:
                             st.session_state.keywords_history = h
                             st.session_state.blog_gen_target = {"keyword": kw, "title": title_to_use}
                             st.session_state.blog_gen_result = None
-                            # 뉴스→블로그→웹 순서로 summary 자동 수집
-                            with st.spinner(f"'{kw}' 관련 기사 검색 중..."):
-                                st.session_state.blog_gen_summary = news_fetcher.fetch_summary_for_keyword(kw)
+                            st.session_state.show_schedule_picker = False
                             # 사이트맵에서 관련 URL 자동 추천
                             cached = sitemap_service.load_cache()
-                            related = sitemap_service.find_related(kw, cached, n=6)
-                            st.session_state.blog_gen_internal = "\n".join(related[:3])
-                            st.session_state.blog_gen_related = "\n".join(related[3:6])
+                            related_urls = sitemap_service.find_related(kw, cached, n=6)
+                            st.session_state.blog_gen_internal = "\n".join(related_urls[:3])
+                            st.session_state.blog_gen_related = "\n".join(related_urls[3:6])
                             st.rerun()
 
 # ── 블로그 글 생성 ────────────────────────────────────────
@@ -913,55 +926,62 @@ if st.session_state.blog_gen_target:
             st.rerun()
 
     gen_title = st.text_input("제목", value=target["title"], key="blog_gen_title")
-    gen_summary = st.text_area(
-        "기사 요약 (선택 — 최대 2,000자)",
-        height=150,
-        placeholder="기사 내용을 붙여넣으세요. 없으면 비워두세요.",
-        key="blog_gen_summary",
-    )
 
     col_il, col_rp = st.columns(2)
     with col_il:
         gen_internal = st.text_area(
             "내부링크 (한 줄에 하나씩, 선택 — 사이트맵에서 자동 추천됨)",
             height=120,
-            placeholder="https://bodyandwell.com/관련-포스트/",
+            placeholder="https://example.com/관련-포스트/",
             key="blog_gen_internal",
         )
     with col_rp:
         gen_related = st.text_area(
             "함께 보면 좋은 글 URL 3개 (선택 — 사이트맵에서 자동 추천됨)",
             height=120,
-            placeholder="https://bodyandwell.com/관련-포스트/",
+            placeholder="https://example.com/관련-포스트/",
             key="blog_gen_related",
         )
 
-    if not groq_key:
-        st.error("Groq API 키를 입력해주세요.")
+    # 사이트 선택 (생성 전에 미리 선택)
+    wp_sites_pre = _load_wp_sites()
+    if wp_sites_pre:
+        selected_site_name_pre = st.selectbox(
+            "발행 사이트 선택",
+            [s["name"] for s in wp_sites_pre],
+            key="blog_wp_site",
+        )
+        selected_site = next(s for s in wp_sites_pre if s["name"] == selected_site_name_pre)
     else:
-        if st.button("✍️ 글 생성", type="primary", use_container_width=True):
-            active_key = groq_keys[st.session_state.get("groq_key_idx", 0)] if groq_keys else groq_key
-            groq_client = Groq(api_key=active_key)
+        selected_site = None
+        st.warning("⚠️ 사이드바에서 WordPress 사이트를 먼저 등록해주세요.")
+
+    st.caption("💡 Gemini가 Google 검색으로 관련 정보를 직접 수집해서 글을 작성합니다.")
+
+    if not gemini_key1:
+        st.error("사이드바에서 Gemini API 키를 입력해주세요.")
+    else:
+        if st.button("✍️ 글 생성 (Gemini)", type="primary", use_container_width=True):
             internal_list = [u.strip() for u in gen_internal.splitlines() if u.strip()] or None
             related_list = [u.strip() for u in gen_related.splitlines() if u.strip()] or None
-            summary_text = gen_summary.strip()[:2000]
 
-            with st.spinner("글 생성 중... (30~60초 소요)"):
-                post_data, tokens = claude_service.generate_blog_post(
-                    keyword=target["keyword"],
-                    title=gen_title,
-                    client=groq_client,
-                    summary=summary_text,
-                    internal_links=internal_list,
-                    related_posts=related_list,
-                )
-                _add_groq_tokens(tokens)
-
-            if post_data:
-                st.session_state.blog_gen_result = post_data
-                st.success(f"✅ 글 생성 완료! (토큰: {tokens:,})")
-            else:
-                st.error("❌ JSON 파싱 실패. 다시 시도해보세요.")
+            with st.spinner("Gemini가 검색 중... (30~60초 소요)"):
+                try:
+                    post_data, used_key = gemini_service.generate_blog_post(
+                        keyword=target["keyword"],
+                        title=gen_title,
+                        api_key1=gemini_key1,
+                        api_key2=gemini_key2,
+                        internal_links=internal_list,
+                        related_posts=related_list,
+                    )
+                    if post_data:
+                        st.session_state.blog_gen_result = post_data
+                        st.success(f"✅ 글 생성 완료! (Gemini Key {used_key} 사용)")
+                    else:
+                        st.error("❌ JSON 파싱 실패. 다시 시도해보세요.")
+                except Exception as e:
+                    st.error(f"❌ Gemini 오류: {e}")
 
     if st.session_state.blog_gen_result:
         result = st.session_state.blog_gen_result
@@ -981,16 +1001,11 @@ if st.session_state.blog_gen_target:
         with st.expander("👁️ 렌더링 미리보기", expanded=True):
             st.html(result.get("content", ""))
 
-        wp_sites = _load_wp_sites()
-        if wp_sites:
-            col_site, col_draft, col_pub = st.columns([3, 2, 2])
-            with col_site:
-                selected_site_name = st.selectbox(
-                    "발행 사이트", [s["name"] for s in wp_sites], key="blog_wp_site"
-                )
-                selected_site = next(s for s in wp_sites if s["name"] == selected_site_name)
+        if selected_site:
+            st.divider()
+            col_draft, col_pub, col_sched = st.columns(3)
+
             with col_draft:
-                st.write("")
                 if st.button("📝 초안 저장", use_container_width=True):
                     with st.spinner("업로드 중..."):
                         try:
@@ -998,8 +1013,8 @@ if st.session_state.blog_gen_target:
                             st.success(f"✅ 초안 저장됨  \n{r.get('link', '')}")
                         except Exception as e:
                             st.error(f"❌ 실패: {e}")
+
             with col_pub:
-                st.write("")
                 if st.button("🚀 바로 게시", type="primary", use_container_width=True):
                     with st.spinner("게시 중..."):
                         try:
@@ -1007,8 +1022,47 @@ if st.session_state.blog_gen_target:
                             st.success(f"✅ 게시 완료  \n{r.get('link', '')}")
                         except Exception as e:
                             st.error(f"❌ 실패: {e}")
-        else:
-            st.warning("⚠️ 사이드바에서 WordPress 사이트를 먼저 등록해주세요.")
+
+            with col_sched:
+                if st.button("🗓️ 예약 발행", use_container_width=True):
+                    st.session_state.show_schedule_picker = True
+
+            if st.session_state.get("show_schedule_picker"):
+                from datetime import date, time as dtime, timedelta
+                with st.container(border=True):
+                    st.caption("예약 발행 날짜/시간 설정")
+                    col_d, col_t = st.columns(2)
+                    with col_d:
+                        sched_date = st.date_input(
+                            "날짜",
+                            value=datetime.now().date() + timedelta(days=1),
+                            min_value=datetime.now().date(),
+                            key="sched_date",
+                        )
+                    with col_t:
+                        sched_hour = st.number_input("시", min_value=0, max_value=23, value=9, key="sched_hour")
+                        sched_min = st.number_input("분", min_value=0, max_value=59, value=0, step=10, key="sched_min")
+
+                    scheduled_dt = f"{sched_date}T{str(sched_hour).zfill(2)}:{str(sched_min).zfill(2)}:00"
+                    st.caption(f"예약 시간: {scheduled_dt}")
+
+                    col_confirm, col_cancel = st.columns(2)
+                    with col_confirm:
+                        if st.button("✅ 예약 확정", type="primary", use_container_width=True, key="sched_confirm"):
+                            with st.spinner("예약 중..."):
+                                try:
+                                    r = wp_service.publish_post(
+                                        selected_site, result,
+                                        scheduled_date=scheduled_dt,
+                                    )
+                                    st.success(f"✅ 예약 완료 ({scheduled_dt})  \n{r.get('link', '')}")
+                                    st.session_state.show_schedule_picker = False
+                                except Exception as e:
+                                    st.error(f"❌ 실패: {e}")
+                    with col_cancel:
+                        if st.button("취소", use_container_width=True, key="sched_cancel"):
+                            st.session_state.show_schedule_picker = False
+                            st.rerun()
 
 # ── 세션 초기화 ───────────────────────────────────────────
 for key in ["keyword_table", "selected_kw", "titles"]:

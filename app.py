@@ -409,10 +409,8 @@ if "gemini_key_used" not in st.session_state:
 for key in ["naver_ad_calls", "naver_search_calls"]:
     if key not in st.session_state:
         st.session_state[key] = 0
-if "bulk_gen_items" not in st.session_state:
-    st.session_state.bulk_gen_items = []
-if "bulk_title_items" not in st.session_state:
-    st.session_state.bulk_title_items = []
+if "bulk_items" not in st.session_state:
+    st.session_state.bulk_items = []
 
 crawled_file_links = _load_crawled_links()
 groq_keys = [k for k in [groq_key, groq_key2] if k.strip()]
@@ -610,9 +608,9 @@ if start_btn:
         if collected:
             _run_longtail([r["keyword"] for r in collected])
             if st.session_state.get("longtail_table"):
-                kws = [r["keyword"] for r in st.session_state.longtail_table]
+                kws = [r["keyword"] for r in st.session_state.longtail_table if r.get("mobile_ctr", 0) >= 2]
                 added = _save_keywords_to_history(kws)
-                st.success(f"✅ 키워드 {added}개 히스토리에 저장됐습니다. 아래 키워드 히스토리에서 글을 생성하세요.")
+                st.success(f"✅ 모바일 클릭률 2% 이상 키워드 {added}개 히스토리에 저장됐습니다.")
         st.rerun()
 
 # ── 2차 검색: 황금 롱테일 키워드 ─────────────────────────
@@ -670,9 +668,13 @@ if st.session_state.longtail_table:
 """, height=50)
 
     if st.button("📥 히스토리에 저장", use_container_width=True):
-        kws = [r["keyword"] for r in st.session_state.longtail_table]
+        kws = [r["keyword"] for r in st.session_state.longtail_table if r.get("mobile_ctr", 0) >= 2]
         added = _save_keywords_to_history(kws)
-        st.success(f"✅ {added}개 키워드 저장됨 (이미 있는 키워드 제외)")
+        filtered_out = len(st.session_state.longtail_table) - len(kws)
+        msg = f"✅ {added}개 저장됨 (모바일 클릭률 2% 이상)"
+        if filtered_out:
+            msg += f" | {filtered_out}개 제외됨 (클릭률 미달)"
+        st.success(msg)
         st.rerun()
 
 # ── 키워드 히스토리 ───────────────────────────────────────
@@ -683,9 +685,9 @@ _hist = _load_keywords_history()
 _hist_kws = list(_hist.keys())
 
 if not _hist_kws:
-    st.caption("키워드 히스토리가 없습니다. 위에서 키워드를 찾아주세요.")
+    st.caption("키워드 히스토리가 없습니다. 위에서 황금 롱테일 키워드를 찾아주세요.")
 else:
-    st.caption(f"총 {len(_hist_kws)}개 황금 롱테일 키워드")
+    st.caption(f"총 {len(_hist_kws)}개 황금 롱테일 키워드 (모바일 클릭률 2% 이상)")
     col_selall, col_desel, _ = st.columns([2, 2, 6])
     with col_selall:
         if st.button("전체 선택", use_container_width=True):
@@ -720,11 +722,13 @@ else:
     else:
         if st.button(f"📝 제목 만들기 ({n_sel}개)", type="primary",
                      use_container_width=True, disabled=n_sel == 0):
-            title_items = []
+            new_items = []
             prog = st.progress(0)
             status_msg = st.empty()
             groq_client_t = Groq(api_key=groq_keys[st.session_state.get("groq_key_idx", 0)])
             key_idx_t = st.session_state.get("groq_key_idx", 0)
+            wp_sites_default = _load_wp_sites()
+            default_site = wp_sites_default[0]["name"] if wp_sites_default else ""
 
             for i, kw in enumerate(selected_kws_for_gen):
                 status_msg.info(f"[{i+1}/{n_sel}] {kw} — 제목 생성 중...")
@@ -743,103 +747,29 @@ else:
                             _add_groq_tokens(tokens)
                         except Exception:
                             pass
-                title_items.append({"keyword": kw, "title": title})
+                new_items.append({
+                    "keyword": kw,
+                    "title": title,
+                    "post_data": {},
+                    "site_name": default_site,
+                })
                 prog.progress((i + 1) / n_sel)
 
             prog.empty()
             status_msg.empty()
-            st.session_state.bulk_title_items = title_items
-            st.session_state.bulk_gen_items = []
+            st.session_state.bulk_items = new_items
             st.rerun()
 
-# ── STEP 2: 제목 확인 & 글 생성 ──────────────────────────
-if st.session_state.bulk_title_items:
-    title_items = st.session_state.bulk_title_items
-    st.divider()
-    st.subheader("✏️ 제목 확인 & 글 생성")
-    st.caption("제목을 수정한 뒤 글 생성 버튼을 누르세요.")
-
-    # 제목 편집 테이블
-    hc2 = st.columns([0.5, 1.5, 5])
-    for col, label in zip(hc2, ["#", "키워드", "제목 (수정 가능)"]):
-        col.markdown(f"**{label}**")
-
-    for i, item in enumerate(title_items):
-        c1, c2, c3 = st.columns([0.5, 1.5, 5])
-        with c1:
-            st.caption(str(i + 1))
-        with c2:
-            st.caption(item["keyword"])
-        with c3:
-            st.text_input("", value=item["title"],
-                          key=f"title_edit_{i}", label_visibility="collapsed")
-
-    col_gen, col_cancel = st.columns([3, 1])
-    with col_cancel:
-        if st.button("🗑️ 초기화", use_container_width=True, key="title_step_cancel"):
-            st.session_state.bulk_title_items = []
-            st.rerun()
-    with col_gen:
-        if not gemini_key1:
-            st.error("사이드바에서 Gemini API 키를 입력해주세요.")
-        else:
-            wp_sites_check = _load_wp_sites()
-            if not wp_sites_check:
-                st.warning("⚠️ 사이드바에서 WordPress 사이트를 먼저 등록해주세요.")
-            elif st.button(f"✍️ 글 생성 ({len(title_items)}개)", type="primary",
-                           use_container_width=True):
-                gen_items = []
-                prog2 = st.progress(0)
-                status2 = st.empty()
-                n_t = len(title_items)
-
-                for i, item in enumerate(title_items):
-                    edited_title = st.session_state.get(f"title_edit_{i}", item["title"])
-                    kw = item["keyword"]
-                    status2.info(f"[{i+1}/{n_t}] {kw} — 글 생성 중 (Gemini)...")
-
-                    cached_urls2 = sitemap_service.load_cache()
-                    related_urls2 = sitemap_service.find_related(kw, cached_urls2, n=6)
-                    internal_list2 = related_urls2[:3] or None
-                    related_list2 = related_urls2[3:6] or None
-                    post_data = {}
-                    try:
-                        post_data, used_key2 = gemini_service.generate_blog_post(
-                            keyword=kw, title=edited_title,
-                            api_key1=gemini_key1, api_key2=gemini_key2,
-                            internal_links=internal_list2, related_posts=related_list2,
-                        )
-                        st.session_state.gemini_key_used = used_key2
-                        _add_gemini_call()
-                    except Exception as e:
-                        st.warning(f"⚠️ {kw} 글 생성 실패: {e}")
-
-                    gen_items.append({
-                        "keyword": kw,
-                        "title": edited_title,
-                        "post_data": post_data,
-                        "site_name": wp_sites_check[0]["name"],
-                        "scheduled_dt": "",
-                    })
-                    prog2.progress((i + 1) / n_t)
-
-                prog2.empty()
-                status2.empty()
-                st.session_state.bulk_gen_items = gen_items
-                st.session_state.bulk_title_items = []
-                st.success(f"✅ {len(gen_items)}개 글 생성 완료!")
-                st.rerun()
-
-# ── 일괄 발행 테이블 ──────────────────────────────────────
-if st.session_state.bulk_gen_items:
-    items = st.session_state.bulk_gen_items
+# ── 발행 테이블 ───────────────────────────────────────────
+if st.session_state.bulk_items:
+    _bulk_items = st.session_state.bulk_items
     wp_sites_pub = _load_wp_sites()
     site_names = [s["name"] for s in wp_sites_pub]
 
     st.divider()
-    st.subheader("🗓️ 일괄 발행")
+    st.subheader("🗓️ 발행 준비")
 
-    # 자동 시간 계산
+    # 예약 시간 자동 계산
     with st.container(border=True):
         st.caption("예약 시간 자동 계산")
         _now2 = datetime.now()
@@ -859,7 +789,7 @@ if st.session_state.bulk_gen_items:
                     bulk_start_date.year, bulk_start_date.month, bulk_start_date.day,
                     bulk_start_hour, bulk_start_min
                 )
-                for i in range(len(items)):
+                for i in range(len(_bulk_items)):
                     dt = start_dt + timedelta(hours=i * bulk_interval)
                     st.session_state[f"bulk_sched_{i}"] = dt.strftime("%Y-%m-%d %H:%M")
                 st.rerun()
@@ -870,7 +800,30 @@ if st.session_state.bulk_gen_items:
         col.markdown(f"**{label}**")
     st.divider()
 
-    for i, item in enumerate(items):
+    def _do_generate_post(item: dict, edited_title: str) -> dict:
+        kw = item["keyword"]
+        cached_u = sitemap_service.load_cache()
+        rel_u = sitemap_service.find_related(kw, cached_u, n=6)
+        post_data, used_k = gemini_service.generate_blog_post(
+            keyword=kw, title=edited_title,
+            api_key1=gemini_key1, api_key2=gemini_key2,
+            internal_links=rel_u[:3] or None,
+            related_posts=rel_u[3:6] or None,
+        )
+        st.session_state.gemini_key_used = used_k
+        _add_gemini_call()
+        return post_data
+
+    def _do_publish(site_obj: dict, post_data: dict, title: str, sched: str):
+        pub_data = dict(post_data)
+        pub_data["title"] = title
+        if sched:
+            sched_iso = sched.replace(" ", "T") + ":00" if len(sched) == 16 else sched
+            wp_service.publish_post(site_obj, pub_data, scheduled_date=sched_iso)
+        else:
+            wp_service.publish_post(site_obj, pub_data, pub_status="publish")
+
+    for i, item in enumerate(_bulk_items):
         cols = st.columns([0.5, 1.5, 3.5, 0.7, 1.8, 2.2, 1.2])
         with cols[0]:
             st.caption(str(i + 1))
@@ -880,7 +833,8 @@ if st.session_state.bulk_gen_items:
             cur_title = st.text_input("", value=item["title"],
                                       key=f"bulk_title_{i}", label_visibility="collapsed")
         with cols[3]:
-            if st.button("👁️", key=f"bulk_prev_btn_{i}"):
+            has_post = bool(item.get("post_data"))
+            if st.button("👁️", key=f"bulk_prev_btn_{i}", disabled=not has_post):
                 st.session_state[f"bulk_prev_{i}"] = not st.session_state.get(f"bulk_prev_{i}", False)
                 st.rerun()
         with cols[4]:
@@ -894,53 +848,60 @@ if st.session_state.bulk_gen_items:
         with cols[6]:
             if st.button("발행", key=f"bulk_pub_{i}", use_container_width=True):
                 site_obj = next((s for s in wp_sites_pub if s["name"] == cur_site), None)
-                if site_obj and item["post_data"]:
-                    pub_data = dict(item["post_data"])
-                    pub_data["title"] = cur_title
-                    sched_str = cur_sched.strip()
+                if not site_obj:
+                    st.error("사이트 없음")
+                elif not gemini_key1:
+                    st.error("Gemini 키 필요")
+                else:
                     try:
-                        if sched_str:
-                            sched_iso = sched_str.replace(" ", "T") + ":00" if len(sched_str) == 16 else sched_str
-                            r = wp_service.publish_post(site_obj, pub_data, scheduled_date=sched_iso)
-                            st.success(f"✅ 예약완료")
-                        else:
-                            r = wp_service.publish_post(site_obj, pub_data, pub_status="publish")
-                            st.success(f"✅ 게시완료")
+                        post_data = item.get("post_data") or _do_generate_post(item, cur_title)
+                        st.session_state.bulk_items[i]["post_data"] = post_data
+                        _do_publish(site_obj, post_data, cur_title, cur_sched.strip())
+                        st.success("✅ 완료")
                     except Exception as e:
                         st.error(f"❌ {e}")
 
-        # 미리보기 expander
-        if st.session_state.get(f"bulk_prev_{i}") and item["post_data"]:
+        if st.session_state.get(f"bulk_prev_{i}") and item.get("post_data"):
             with st.expander(f"👁️ {item['keyword']} 미리보기", expanded=True):
                 st.html(item["post_data"].get("content", ""))
 
     st.divider()
-    if st.button("🚀 일괄 발행", type="primary", use_container_width=True):
-        success, fail = 0, 0
-        for i, item in enumerate(items):
-            site_name = st.session_state.get(f"bulk_site_{i}", item["site_name"])
-            site_obj = next((s for s in wp_sites_pub if s["name"] == site_name), None)
-            title_val = st.session_state.get(f"bulk_title_{i}", item["title"])
-            sched_val = st.session_state.get(f"bulk_sched_input_{i}", "").strip()
-            if not site_obj or not item["post_data"]:
-                fail += 1
-                continue
-            pub_data = dict(item["post_data"])
-            pub_data["title"] = title_val
-            try:
-                if sched_val:
-                    sched_iso = sched_val.replace(" ", "T") + ":00" if len(sched_val) == 16 else sched_val
-                    wp_service.publish_post(site_obj, pub_data, scheduled_date=sched_iso)
-                else:
-                    wp_service.publish_post(site_obj, pub_data, pub_status="publish")
-                success += 1
-            except Exception:
-                fail += 1
-        st.success(f"✅ 발행 완료: {success}개 성공 / {fail}개 실패")
-
-    if st.button("🗑️ 초기화", use_container_width=True):
-        st.session_state.bulk_gen_items = []
-        st.rerun()
+    col_bulk, col_reset = st.columns([3, 1])
+    with col_reset:
+        if st.button("🗑️ 초기화", use_container_width=True):
+            st.session_state.bulk_items = []
+            st.rerun()
+    with col_bulk:
+        if not gemini_key1:
+            st.error("사이드바에서 Gemini API 키를 입력해주세요.")
+        elif st.button("🚀 일괄 글생성 + 발행", type="primary", use_container_width=True):
+            success_cnt, fail_cnt = 0, 0
+            prog_b = st.progress(0)
+            status_b = st.empty()
+            n_b = len(_bulk_items)
+            for i, item in enumerate(_bulk_items):
+                kw_b = item["keyword"]
+                title_b = st.session_state.get(f"bulk_title_{i}", item["title"])
+                site_b = st.session_state.get(f"bulk_site_{i}", item["site_name"])
+                sched_b = st.session_state.get(f"bulk_sched_input_{i}", "").strip()
+                site_obj_b = next((s for s in wp_sites_pub if s["name"] == site_b), None)
+                if not site_obj_b:
+                    fail_cnt += 1
+                    prog_b.progress((i + 1) / n_b)
+                    continue
+                try:
+                    status_b.info(f"[{i+1}/{n_b}] {kw_b} — 글 생성 중...")
+                    post_data_b = item.get("post_data") or _do_generate_post(item, title_b)
+                    st.session_state.bulk_items[i]["post_data"] = post_data_b
+                    status_b.info(f"[{i+1}/{n_b}] {kw_b} — 발행 중...")
+                    _do_publish(site_obj_b, post_data_b, title_b, sched_b)
+                    success_cnt += 1
+                except Exception:
+                    fail_cnt += 1
+                prog_b.progress((i + 1) / n_b)
+            prog_b.empty()
+            status_b.empty()
+            st.success(f"✅ 완료: {success_cnt}개 성공 / {fail_cnt}개 실패")
 
 # ── 세션 초기화 ───────────────────────────────────────────
 for key in ["keyword_table", "selected_kw", "titles"]:

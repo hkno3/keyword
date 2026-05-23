@@ -1,8 +1,10 @@
 import os
 import json
+import time
 import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
+from datetime import datetime
 from dotenv import load_dotenv
 from groq import Groq
 
@@ -13,6 +15,28 @@ import news_fetcher
 load_dotenv()
 
 CRAWLED_FILE = os.path.join(os.path.dirname(__file__), "crawled_links.json")
+KEYWORDS_HISTORY_FILE = os.path.join(os.path.dirname(__file__), "keywords_history.json")
+
+def _load_keywords_history() -> dict:
+    try:
+        with open(KEYWORDS_HISTORY_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def _save_keywords_history(history: dict):
+    with open(KEYWORDS_HISTORY_FILE, "w", encoding="utf-8") as f:
+        json.dump(history, f, ensure_ascii=False, indent=2)
+
+def _mark_title_used(keyword: str, title: str):
+    history = _load_keywords_history()
+    if keyword in history:
+        for t in history[keyword]["titles"]:
+            if t["title"] == title:
+                t["used"] = True
+                break
+    _save_keywords_history(history)
+    st.session_state.keywords_history = history
 
 def _load_crawled_links() -> set:
     try:
@@ -53,6 +77,15 @@ with st.sidebar:
         if os.path.exists(CRAWLED_FILE):
             os.remove(CRAWLED_FILE)
         st.session_state.auto_crawled = []
+        st.rerun()
+    history = _load_keywords_history()
+    used_total = sum(1 for kw in history.values() for t in kw["titles"] if t["used"])
+    unused_total = sum(1 for kw in history.values() for t in kw["titles"] if not t["used"])
+    st.caption(f"키워드 히스토리: {len(history)}개 키워드 | 미사용 제목 {unused_total}개 | 사용됨 {used_total}개")
+    if st.button("🗑️ 키워드 히스토리 초기화"):
+        if os.path.exists(KEYWORDS_HISTORY_FILE):
+            os.remove(KEYWORDS_HISTORY_FILE)
+        st.session_state.keywords_history = {}
         st.rerun()
     st.divider()
     st.markdown(
@@ -114,6 +147,8 @@ st.subheader("🤖 자동 키워드 찾기")
 for key in ["auto_keywords", "auto_crawled", "auto_running"]:
     if key not in st.session_state:
         st.session_state[key] = [] if key != "auto_running" else False
+if "keywords_history" not in st.session_state:
+    st.session_state.keywords_history = _load_keywords_history()
 
 crawled_file_links = _load_crawled_links()
 
@@ -271,6 +306,11 @@ if start_btn:
             st.success(f"🎉 키워드 {len(collected)}개 수집 완료!")
         else:
             st.warning(f"기사를 다 돌았어요. {len(collected)}개 수집됨.")
+
+        if collected:
+            _run_longtail([r["keyword"] for r in collected])
+            if st.session_state.get("longtail_table"):
+                _generate_and_save_titles(groq_client)
         st.rerun()
 
 # ── 2차 검색: 황금 롱테일 키워드 ─────────────────────────
@@ -316,6 +356,43 @@ def _run_longtail(seed_keywords: list):
     table = naver_api.build_keyword_table(related, doc_counts)
     st.session_state.longtail_table = table
 
+def _generate_and_save_titles(groq_client):
+    history = _load_keywords_history()
+    longtail = st.session_state.get("longtail_table", [])
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    # 새로 생성이 필요한 키워드만 추림 (히스토리에 없는 것)
+    to_generate = [r for r in longtail if r["keyword"] not in history]
+
+    if not to_generate:
+        st.session_state.keywords_history = history
+        return
+
+    title_status = st.empty()
+    title_progress = st.progress(0)
+
+    for i, row in enumerate(to_generate):
+        kw = row["keyword"]
+        title_status.info(f"✍️ 제목 생성 중: {kw} ({i+1}/{len(to_generate)})")
+        try:
+            titles, recommended = claude_service.generate_titles(kw, groq_client)
+            history[kw] = {
+                "first_found": today,
+                "titles": [
+                    {"title": t, "used": False, "recommended": t == recommended}
+                    for t in titles
+                ],
+            }
+            _save_keywords_history(history)
+        except Exception:
+            pass
+        title_progress.progress((i + 1) / len(to_generate))
+        time.sleep(0.3)
+
+    title_status.empty()
+    title_progress.empty()
+    st.session_state.keywords_history = history
+
 if auto_lt_btn:
     seed_kws = [r["keyword"] for r in st.session_state.auto_keywords]
     _run_longtail(seed_kws)
@@ -351,6 +428,47 @@ if st.session_state.longtail_table:
 <button onclick="navigator.clipboard.writeText(`{tsv_lt}`).then(()=>{{this.textContent='✅ 복사됨!';setTimeout(()=>this.textContent='📋 표 복사 (엑셀 붙여넣기용)',2000)}}).catch(()=>alert('복사 실패'))">📋 표 복사 (엑셀 붙여넣기용)</button>
 <style>button{{padding:8px 20px;background:#ff4b4b;color:white;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-family:sans-serif}}</style>
 """, height=50)
+
+# ── 제목 대기열 ──────────────────────────────────────────
+st.divider()
+st.subheader("✍️ 제목 대기열")
+
+history = st.session_state.get("keywords_history", {})
+longtail_kws = {r["keyword"] for r in st.session_state.get("longtail_table", [])}
+
+# 현재 롱테일 결과에 있고 미사용 제목이 남은 키워드만 표시
+available_kws = [
+    kw for kw in longtail_kws
+    if kw in history and any(not t["used"] for t in history[kw]["titles"])
+]
+# 히스토리에만 있고 미사용 제목이 남은 키워드 (이전 실행 포함)
+history_only_kws = [
+    kw for kw in history
+    if kw not in longtail_kws and any(not t["used"] for t in history[kw]["titles"])
+]
+
+all_pending = available_kws + history_only_kws
+
+if not all_pending:
+    st.caption("미사용 제목이 없습니다. 자동 찾기를 실행해보세요.")
+else:
+    st.caption(f"총 {len(all_pending)}개 키워드 | 제목 선택 후 '사용' 클릭 시 히스토리에 기록됩니다")
+    for kw in all_pending:
+        kw_data = history[kw]
+        unused_count = sum(1 for t in kw_data["titles"] if not t["used"])
+        with st.expander(f"📝 {kw}  ({unused_count}개 남음)", expanded=False):
+            for idx, t in enumerate(kw_data["titles"]):
+                if t["used"]:
+                    st.markdown(f"<span style='color:gray;text-decoration:line-through'>{t['title']}</span> ✅", unsafe_allow_html=True)
+                else:
+                    col1, col2 = st.columns([8, 2])
+                    with col1:
+                        label = f"⭐ **{t['title']}**" if t.get("recommended") else t["title"]
+                        st.markdown(label)
+                    with col2:
+                        if st.button("사용", key=f"use_{kw}_{idx}"):
+                            _mark_title_used(kw, t["title"])
+                            st.rerun()
 
 # ── 세션 초기화 ───────────────────────────────────────────
 for key in ["keyword_table", "selected_kw", "titles"]:
@@ -520,11 +638,12 @@ if st.session_state.keyword_table:
             else:
                 groq_client = Groq(api_key=groq_key)
                 with st.spinner("제목 생성 중..."):
-                    titles = claude_service.generate_titles(selected, groq_client)
+                    titles, recommended = claude_service.generate_titles(selected, groq_client)
                 kw_data = next(r for r in filtered if r["keyword"] == selected)
                 st.session_state.titles = {
                     "keyword": selected,
                     "titles": titles,
+                    "recommended": recommended,
                     "data": kw_data,
                 }
 
@@ -535,6 +654,9 @@ if st.session_state.titles:
 
     st.divider()
     st.subheader("📋 생성된 제목")
+
+    if t.get("recommended"):
+        st.info(f"⭐ 추천 제목: **{t['recommended']}**")
 
     rows = []
     for title in t["titles"]:

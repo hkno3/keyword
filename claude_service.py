@@ -41,39 +41,69 @@ JSON 배열로만 반환: ["키워드1", "키워드2", ...]""",
     return []
 
 
-def generate_titles(keyword: str, client: Groq) -> list[str]:
-    """키워드로 블로그 제목 5개 생성"""
+def generate_titles(keyword: str, client: Groq) -> tuple[list[str], str]:
+    """키워드로 블로그 제목 5개 생성 + 추천 1개 반환"""
     response = client.chat.completions.create(
         model=MODEL,
-        max_tokens=600,
+        max_tokens=1200,
         messages=[{
             "role": "user",
-            "content": f"""한국 블로그 제목 전문가입니다. 키워드 "{keyword}"로 제목 5개를 만드세요.
+            "content": f"""당신은 네이버 블로그 SEO 전문가입니다.
 
-필수 규칙:
-1. 공백 포함 24~32자
-2. "{keyword}"를 제목 맨 앞 15자 이내 배치
-3. 키워드 글자·띄어쓰기 100% 동일하게 유지
-4. 심리 자극: 이득·손실·비교·효율·안전 중 하나를 의미로 녹여내기 (단어 직접 쓰지 말 것)
-5. 자연스러운 한국어 블로그 문체
-6. 동사 위주 능동형
-7. 특수문자·홍보성 단어 금지
-8. 억지 숫자 금지 (자연스러울 때만 사용)
+키워드: "{keyword}"
 
-좋은 예: "{keyword} 먹기 전 꼭 알아야 할 부작용"
-나쁜 예: "{keyword}로 90% 이상의 이득을 달성합니다"
+## 처리 단계
 
-JSON 배열로만 반환: ["제목1", "제목2", "제목3", "제목4", "제목5"]""",
+STEP 1. 키워드에 띄어쓰기가 없으면 한국어 문법에 맞게 교정합니다.
+
+STEP 2. 키워드 분석 (분야 / 주요 독자층 / 독자가 실제로 궁금한 것)
+
+STEP 3. 아래 23가지 검색 심리 중 이 키워드에 해당하는 유형을 판별합니다:
+실행·절차 / 입수·획득 / 준비·확인 / 자격·조건 / 일정·기한 / 비용·가격 / 비교·선택 /
+결과·후기 검증 / 비교 전 탐색 / 문제 해결 / 전환·이동 / 재시도·복구 / 절약·최적화 /
+탈출·중단 / 기한·놓침 대응 / 증빙·제출 / 공식 경로 탐색 / 타인 경험 검증 /
+비교 후 최종 결정 / 선물·대리 구매 / 보안·개인정보 우려 / 초보·입문 진입 / 재구매·반복 사용
+
+## 제목 생성 규칙 (5개 모두 적용)
+1. 키워드를 제목 맨 앞 15자 이내 배치 — 키워드의 띄어쓰기·글자 완전히 동일하게
+2. 공백 포함 24~30자
+3. 숫자 반드시 1개 이상 포함 (개수/기간/연도/금액 등)
+4. 특수기호 사용 금지
+5. 홍보성 단어 금지 (이벤트·강추·무료·공짜·할인·1위 등)
+6. 제목 마무리는 명사형 (~방법, ~총정리, ~조건, ~기준, ~이유 등)
+7. 동사 위주 능동형 표현
+8. 독자가 읽으면 무엇을 얻는지 제목에서 미리 보여줄 것
+
+좋은 예: "백김치 담그는 방법 한 번 따라하면 다시는 사 먹지 않는 이유"
+나쁜 예: "백김치 담그는 방법 총정리"
+
+STEP 3에서 판별한 심리 상태에 맞게 제목 5개를 생성하고,
+공감성·결과 기대감·클릭 충동 기준으로 가장 좋은 제목 1개를 recommended로 선정합니다.
+
+아래 JSON만 반환 (다른 텍스트 절대 없이):
+{{"titles": ["제목1", "제목2", "제목3", "제목4", "제목5"], "recommended": "titles 중 하나와 정확히 동일한 추천 제목"}}""",
         }],
     )
     text = response.choices[0].message.content.strip()
+    match = re.search(r'\{.*?"titles".*?\}', text, re.DOTALL)
+    if match:
+        try:
+            data = json.loads(match.group())
+            titles = data.get("titles", [])
+            recommended = data.get("recommended", titles[0] if titles else "")
+            if titles:
+                return titles, recommended
+        except json.JSONDecodeError:
+            pass
     match = re.search(r"\[.*?\]", text, re.DOTALL)
     if match:
         try:
-            return json.loads(match.group())
+            titles = json.loads(match.group())
+            return titles, titles[0] if titles else ""
         except json.JSONDecodeError:
             pass
-    return [f"{keyword} 제대로 알고 활용하는 방법"]
+    fallback = f"{keyword} 제대로 알고 활용하는 방법 5가지"
+    return [fallback], fallback
 
 
 def validate_title(title: str, keyword: str) -> dict:

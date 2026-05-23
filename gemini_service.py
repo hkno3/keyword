@@ -3,7 +3,7 @@ import re
 from google import genai
 from google.genai import types
 
-MODEL = "gemini-2.5-flash-preview-05-20"
+MODEL = "gemini-2.5-flash"
 
 
 def _make_client(api_key: str):

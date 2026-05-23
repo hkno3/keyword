@@ -12,6 +12,7 @@ import naver_api
 import claude_service
 import news_fetcher
 import wp_service
+import sitemap_service
 
 load_dotenv()
 
@@ -150,6 +151,28 @@ with st.sidebar:
             os.remove(KEYWORDS_HISTORY_FILE)
         st.session_state.keywords_history = {}
         st.rerun()
+    st.divider()
+    st.markdown("**🗺️ 사이트맵 캐시**")
+    cached_urls = sitemap_service.load_cache()
+    st.caption(f"저장된 URL: {len(cached_urls)}개")
+    with st.expander("🔄 Google Sheets에서 불러오기"):
+        sheets_url = st.text_input(
+            "Sheets URL",
+            placeholder="https://docs.google.com/spreadsheets/d/...",
+            key="sitemap_sheets_url",
+            label_visibility="collapsed",
+        )
+        if st.button("불러오기", use_container_width=True, key="sitemap_load_btn"):
+            if sheets_url.strip():
+                with st.spinner("불러오는 중..."):
+                    urls, err = sitemap_service.load_from_sheets(sheets_url.strip())
+                if err:
+                    st.error(f"❌ {err}")
+                else:
+                    st.success(f"✅ {len(urls)}개 URL 저장됨")
+                    st.rerun()
+            else:
+                st.error("URL을 입력해주세요.")
     st.divider()
     st.markdown("**🌐 WordPress 사이트**")
     wp_sites = _load_wp_sites()
@@ -695,6 +718,11 @@ else:
                             st.session_state.keywords_history = h
                             st.session_state.blog_gen_target = {"keyword": kw, "title": title_to_use}
                             st.session_state.blog_gen_result = None
+                            # 사이트맵에서 관련 URL 자동 추천
+                            cached = sitemap_service.load_cache()
+                            related = sitemap_service.find_related(kw, cached, n=6)
+                            st.session_state.blog_gen_internal = "\n".join(related[:3])
+                            st.session_state.blog_gen_related = "\n".join(related[3:6])
                             st.rerun()
 
 # ── 블로그 글 생성 ────────────────────────────────────────
@@ -726,15 +754,15 @@ if st.session_state.blog_gen_target:
     col_il, col_rp = st.columns(2)
     with col_il:
         gen_internal = st.text_area(
-            "내부링크 (한 줄에 하나씩, 선택)",
-            height=100,
+            "내부링크 (한 줄에 하나씩, 선택 — 사이트맵에서 자동 추천됨)",
+            height=120,
             placeholder="https://bodyandwell.com/관련-포스트/",
             key="blog_gen_internal",
         )
     with col_rp:
         gen_related = st.text_area(
-            "함께 보면 좋은 글 URL 3개 (선택)",
-            height=100,
+            "함께 보면 좋은 글 URL 3개 (선택 — 사이트맵에서 자동 추천됨)",
+            height=120,
             placeholder="https://bodyandwell.com/관련-포스트/",
             key="blog_gen_related",
         )

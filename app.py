@@ -340,6 +340,14 @@ if start_btn:
                 seeds = claude_service.extract_seed_keywords(text, groq_client)
                 seeds = [s for s in seeds if len(s.strip()) >= 2]
             except Exception as e:
+                err_str = str(e)
+                if "429" in err_str or "rate_limit" in err_str.lower():
+                    import re as _re
+                    wait_match = _re.search(r"try again in ([\d]+m[\d.]+s|[\d.]+s)", err_str)
+                    wait_msg = f" ({wait_match.group(1)} 후 재시도)" if wait_match else ""
+                    status_box.error(f"🚫 Groq 하루 토큰 한도 초과{wait_msg}. 내일 다시 시도하거나 Dev Tier로 업그레이드하세요.")
+                    st.session_state.auto_running = False
+                    break
                 status_box.warning(f"⚠️ 씨드 추출 실패: {e}")
                 continue
 

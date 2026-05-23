@@ -37,6 +37,19 @@ def _mark_title_used(keyword: str, title: str):
                 break
     _save_keywords_history(history)
     st.session_state.keywords_history = history
+    st.session_state.last_used_title = {"keyword": keyword, "title": title}
+
+def _unmark_title_used(keyword: str, title: str):
+    history = _load_keywords_history()
+    if keyword in history:
+        for t in history[keyword]["titles"]:
+            if t["title"] == title:
+                t["used"] = False
+                break
+    _save_keywords_history(history)
+    st.session_state.keywords_history = history
+    if st.session_state.get("last_used_title", {}).get("title") == title:
+        st.session_state.last_used_title = None
 
 def _load_crawled_links() -> set:
     try:
@@ -436,6 +449,12 @@ st.subheader("✍️ 제목 대기열")
 history = st.session_state.get("keywords_history", {})
 longtail_kws = {r["keyword"] for r in st.session_state.get("longtail_table", [])}
 
+# 마지막으로 사용 처리한 제목 표시
+last_used = st.session_state.get("last_used_title")
+if last_used:
+    st.success(f"📌 작성할 제목: **{last_used['title']}**")
+    st.caption(f"키워드: {last_used['keyword']}")
+
 # 현재 롱테일 결과에 있고 미사용 제목이 남은 키워드만 표시
 available_kws = [
     kw for kw in longtail_kws
@@ -459,7 +478,13 @@ else:
         with st.expander(f"📝 {kw}  ({unused_count}개 남음)", expanded=False):
             for idx, t in enumerate(kw_data["titles"]):
                 if t["used"]:
-                    st.markdown(f"<span style='color:gray;text-decoration:line-through'>{t['title']}</span> ✅", unsafe_allow_html=True)
+                    col1, col2 = st.columns([8, 2])
+                    with col1:
+                        st.markdown(f"<span style='color:gray;text-decoration:line-through'>{t['title']}</span> ✅ 사용됨", unsafe_allow_html=True)
+                    with col2:
+                        if st.button("취소", key=f"unuse_{kw}_{idx}"):
+                            _unmark_title_used(kw, t["title"])
+                            st.rerun()
                 else:
                     col1, col2 = st.columns([8, 2])
                     with col1:

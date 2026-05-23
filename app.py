@@ -700,6 +700,22 @@ else:
                 st.session_state[f"hist_chk_{kw}"] = False
             st.rerun()
 
+    st.markdown("""<style>
+div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stHorizontalBlock"] {
+    margin-bottom: -18px;
+    align-items: center;
+}
+div[data-testid="stVerticalBlockBorderWrapper"] .stCheckbox {
+    margin-top: 6px;
+}
+div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="element-container"] p {
+    margin: 0; line-height: 1.3;
+}
+div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
+    padding: 1px 7px; min-height: 0; height: 22px;
+    font-size: 11px; line-height: 1;
+}
+</style>""", unsafe_allow_html=True)
     with st.container(height=300):
         for kw in _hist_kws:
             col_chk, col_kw, col_del = st.columns([1, 8, 1])
@@ -709,7 +725,7 @@ else:
                 date_str = _hist[kw].get("first_found", "")
                 st.caption(f"**{kw}** {date_str}")
             with col_del:
-                if st.button("🗑️", key=f"hist_del_{kw}"):
+                if st.button("✕", key=f"hist_del_{kw}"):
                     del _hist[kw]
                     _save_keywords_history(_hist)
                     st.rerun()

@@ -377,17 +377,22 @@ if st.session_state.keyword_table:
 
     st.subheader("📊 키워드 목록")
     default_min = st.session_state.get("min_search_pre", 3000)
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     with col1:
         min_search = st.number_input("최소 월 검색량", min_value=0, value=default_min, step=100)
     with col2:
         max_doc = st.number_input("최대 문서수 (0=제한없음)", min_value=0, value=0, step=1000)
+    with col3:
+        min_stars = st.number_input("최소 별 개수 (1~5)", min_value=1, max_value=5, value=3, step=1)
 
+    all_stars = ["⭐", "⭐⭐", "⭐⭐⭐", "⭐⭐⭐⭐", "⭐⭐⭐⭐⭐"]
+    valid_stars = set(all_stars[min_stars - 1:])
     filtered = [
         r for r in table
         if r["total_search"] >= min_search
         and (max_doc == 0 or r["doc_count"] <= max_doc)
         and (r["pc_ctr"] >= 1 or r["mobile_ctr"] >= 1)
+        and r["stars"] in valid_stars
     ]
 
     if not filtered:

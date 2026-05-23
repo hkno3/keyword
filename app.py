@@ -885,9 +885,9 @@ else:
                             st.session_state.keywords_history = h
                             st.session_state.blog_gen_target = {"keyword": kw, "title": title_to_use}
                             st.session_state.blog_gen_result = None
-                            # 기사 본문 자동 로드
-                            h_full = _load_keywords_history()
-                            st.session_state.blog_gen_summary = h_full.get(kw, {}).get("source_article", "")
+                            # 뉴스→블로그→웹 순서로 summary 자동 수집
+                            with st.spinner(f"'{kw}' 관련 기사 검색 중..."):
+                                st.session_state.blog_gen_summary = news_fetcher.fetch_summary_for_keyword(kw)
                             # 사이트맵에서 관련 URL 자동 추천
                             cached = sitemap_service.load_cache()
                             related = sitemap_service.find_related(kw, cached, n=6)

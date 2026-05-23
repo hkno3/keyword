@@ -231,3 +231,43 @@ def scrape_article(url: str) -> str:
         return "\n".join(lines)[:MAX_SCRAPE_CHARS]
     except Exception:
         return ""
+
+
+def fetch_summary_for_keyword(keyword: str, max_chars: int = 2000) -> str:
+    """키워드로 뉴스→블로그→웹 순서로 스크래핑해서 summary 반환"""
+    client_id = os.getenv("NAVER_CLIENT_ID", "")
+    client_secret = os.getenv("NAVER_CLIENT_SECRET", "")
+    headers = {"X-Naver-Client-Id": client_id, "X-Naver-Client-Secret": client_secret}
+
+    def _get_urls(search_type: str) -> list[str]:
+        try:
+            r = requests.get(
+                f"https://openapi.naver.com/v1/search/{search_type}",
+                headers=headers,
+                params={"query": keyword, "display": 5, "sort": "date"},
+                timeout=10,
+            )
+            items = r.json().get("items", []) if r.ok else []
+            return [item.get("link", "") for item in items if item.get("link")]
+        except Exception:
+            return []
+
+    def _try_scrape(urls: list[str]) -> str:
+        collected = []
+        for url in urls:
+            if sum(len(t) for t in collected) >= max_chars:
+                break
+            text = scrape_article(url)
+            if text and len(text) > 100:
+                collected.append(text[:600])
+        return "\n\n".join(collected)[:max_chars]
+
+    for search_type in ["news", "blog", "webkr"]:
+        urls = _get_urls(search_type)
+        if not urls:
+            continue
+        result = _try_scrape(urls)
+        if result:
+            return result
+
+    return ""

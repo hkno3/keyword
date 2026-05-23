@@ -37,7 +37,6 @@ def _mark_title_used(keyword: str, title: str):
                 break
     _save_keywords_history(history)
     st.session_state.keywords_history = history
-    st.session_state.last_used_title = {"keyword": keyword, "title": title}
 
 def _unmark_title_used(keyword: str, title: str):
     history = _load_keywords_history()
@@ -449,19 +448,28 @@ st.subheader("✍️ 제목 대기열")
 history = st.session_state.get("keywords_history", {})
 longtail_kws = {r["keyword"] for r in st.session_state.get("longtail_table", [])}
 
-# 마지막으로 사용 처리한 제목 + 취소 버튼
-last_used = st.session_state.get("last_used_title")
-if last_used:
-    col_title, col_cancel = st.columns([8, 2])
-    with col_title:
-        st.success(f"📌 작성할 제목: **{last_used['title']}**")
-        st.caption(f"키워드: {last_used['keyword']}")
-    with col_cancel:
-        st.write("")
-        st.write("")
-        if st.button("↩️ 취소", use_container_width=True):
-            _unmark_title_used(last_used["keyword"], last_used["title"])
-            st.rerun()
+# 사용됨 제목 전체 목록 (히스토리 파일 기반)
+used_titles = [
+    {"keyword": kw, "title": t["title"]}
+    for kw, kw_data in history.items()
+    for t in kw_data["titles"]
+    if t["used"]
+]
+
+if used_titles:
+    st.markdown("**📌 작성할 제목 목록**")
+    for item in used_titles:
+        col1, col2 = st.columns([8, 2])
+        with col1:
+            st.success(f"**{item['title']}**")
+            st.caption(f"키워드: {item['keyword']}")
+        with col2:
+            st.write("")
+            st.write("")
+            if st.button("↩️ 취소", key=f"cancel_{item['keyword']}_{item['title'][:10]}"):
+                _unmark_title_used(item["keyword"], item["title"])
+                st.session_state.keywords_history = _load_keywords_history()
+                st.rerun()
 
 # 미사용 제목이 남은 키워드 목록
 available_kws = [
@@ -492,6 +500,7 @@ else:
                     with col2:
                         if st.button("사용", key=f"use_{kw}_{idx}"):
                             _mark_title_used(kw, t["title"])
+                            st.session_state.keywords_history = _load_keywords_history()
                             st.rerun()
 
 # ── 세션 초기화 ───────────────────────────────────────────

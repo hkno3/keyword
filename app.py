@@ -943,6 +943,19 @@ if st.session_state.blog_gen_target:
             key="blog_gen_related",
         )
 
+    # 사이트 선택 (생성 전에 미리 선택)
+    wp_sites_pre = _load_wp_sites()
+    if wp_sites_pre:
+        selected_site_name_pre = st.selectbox(
+            "발행 사이트 선택",
+            [s["name"] for s in wp_sites_pre],
+            key="blog_wp_site",
+        )
+        selected_site = next(s for s in wp_sites_pre if s["name"] == selected_site_name_pre)
+    else:
+        selected_site = None
+        st.warning("⚠️ 사이드바에서 WordPress 사이트를 먼저 등록해주세요.")
+
     st.caption("💡 Gemini가 Google 검색으로 관련 정보를 직접 수집해서 글을 작성합니다.")
 
     if not gemini_key1:
@@ -988,15 +1001,7 @@ if st.session_state.blog_gen_target:
         with st.expander("👁️ 렌더링 미리보기", expanded=True):
             st.html(result.get("content", ""))
 
-        wp_sites = _load_wp_sites()
-        if wp_sites:
-            col_site, col_status = st.columns([3, 3])
-            with col_site:
-                selected_site_name = st.selectbox(
-                    "발행 사이트", [s["name"] for s in wp_sites], key="blog_wp_site"
-                )
-                selected_site = next(s for s in wp_sites if s["name"] == selected_site_name)
-
+        if selected_site:
             st.divider()
             col_draft, col_pub, col_sched = st.columns(3)
 
@@ -1058,8 +1063,6 @@ if st.session_state.blog_gen_target:
                         if st.button("취소", use_container_width=True, key="sched_cancel"):
                             st.session_state.show_schedule_picker = False
                             st.rerun()
-        else:
-            st.warning("⚠️ 사이드바에서 WordPress 사이트를 먼저 등록해주세요.")
 
 # ── 세션 초기화 ───────────────────────────────────────────
 for key in ["keyword_table", "selected_kw", "titles"]:

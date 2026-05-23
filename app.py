@@ -791,7 +791,7 @@ if st.session_state.bulk_items:
                 )
                 for i in range(len(_bulk_items)):
                     dt = start_dt + timedelta(hours=i * bulk_interval)
-                    st.session_state[f"bulk_sched_{i}"] = dt.strftime("%Y-%m-%d %H:%M")
+                    st.session_state[f"bulk_sched_input_{i}"] = dt.strftime("%Y-%m-%d %H:%M")
                 st.rerun()
 
     # 테이블 헤더
@@ -842,8 +842,7 @@ if st.session_state.bulk_items:
                                     index=site_names.index(item["site_name"]) if item["site_name"] in site_names else 0,
                                     key=f"bulk_site_{i}", label_visibility="collapsed")
         with cols[5]:
-            cur_sched = st.text_input("", value=st.session_state.get(f"bulk_sched_{i}", ""),
-                                      placeholder="2026-05-24 09:00",
+            cur_sched = st.text_input("", placeholder="2026-05-24 09:00",
                                       key=f"bulk_sched_input_{i}", label_visibility="collapsed")
         with cols[6]:
             if st.button("발행", key=f"bulk_pub_{i}", use_container_width=True):

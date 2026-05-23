@@ -364,6 +364,18 @@ def _run_longtail(seed_keywords: list):
     table = naver_api.build_keyword_table(related, doc_counts)
     st.session_state.longtail_table = table
 
+def _find_source_article(kw: str) -> str:
+    """롱테일 키워드와 가장 관련 있는 기사 본문 반환"""
+    articles = st.session_state.get("keyword_articles", {})
+    # 완전 일치
+    if kw in articles:
+        return articles[kw]
+    # 씨드 키워드가 롱테일에 포함되는 경우
+    for seed, text in articles.items():
+        if seed in kw:
+            return text
+    return ""
+
 def _generate_and_save_titles(groq_client):
     history = _load_keywords_history()
     longtail = st.session_state.get("longtail_table", [])
@@ -402,6 +414,7 @@ def _generate_and_save_titles(groq_client):
             _add_groq_tokens(tokens)
             history[kw] = {
                 "first_found": today,
+                "source_article": _find_source_article(kw),
                 "titles": [
                     {"title": t, "used": False, "recommended": t == recommended}
                     for t in titles
@@ -627,6 +640,7 @@ if start_btn:
                    (r["pc_ctr"] >= 1 or r["mobile_ctr"] >= 1) and \
                    r["keyword"] not in collected_kws:
                     r["source_title"] = article["title"]
+                    r["source_article"] = text[:2000]
                     collected.append(r)
                     collected_kws.add(r["keyword"])
 
@@ -643,6 +657,7 @@ if start_btn:
             st.warning(f"기사를 다 돌았어요. {len(collected)}개 수집됨.")
 
         if collected:
+            st.session_state.keyword_articles = {r["keyword"]: r.get("source_article", "") for r in collected}
             _run_longtail([r["keyword"] for r in collected])
             if st.session_state.get("longtail_table"):
                 _generate_and_save_titles(groq_client)
@@ -833,6 +848,9 @@ else:
                             st.session_state.keywords_history = h
                             st.session_state.blog_gen_target = {"keyword": kw, "title": title_to_use}
                             st.session_state.blog_gen_result = None
+                            # 기사 본문 자동 로드
+                            h_full = _load_keywords_history()
+                            st.session_state.blog_gen_summary = h_full.get(kw, {}).get("source_article", "")
                             # 사이트맵에서 관련 URL 자동 추천
                             cached = sitemap_service.load_cache()
                             related = sitemap_service.find_related(kw, cached, n=6)
@@ -860,7 +878,6 @@ if st.session_state.blog_gen_target:
     gen_title = st.text_input("제목", value=target["title"], key="blog_gen_title")
     gen_summary = st.text_area(
         "기사 요약 (선택 — 최대 2,000자)",
-        value=st.session_state.get("article_text", "")[:2000],
         height=150,
         placeholder="기사 내용을 붙여넣으세요. 없으면 비워두세요.",
         key="blog_gen_summary",

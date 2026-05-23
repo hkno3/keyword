@@ -449,18 +449,25 @@ st.subheader("✍️ 제목 대기열")
 history = st.session_state.get("keywords_history", {})
 longtail_kws = {r["keyword"] for r in st.session_state.get("longtail_table", [])}
 
-# 마지막으로 사용 처리한 제목 표시
+# 마지막으로 사용 처리한 제목 + 취소 버튼
 last_used = st.session_state.get("last_used_title")
 if last_used:
-    st.success(f"📌 작성할 제목: **{last_used['title']}**")
-    st.caption(f"키워드: {last_used['keyword']}")
+    col_title, col_cancel = st.columns([8, 2])
+    with col_title:
+        st.success(f"📌 작성할 제목: **{last_used['title']}**")
+        st.caption(f"키워드: {last_used['keyword']}")
+    with col_cancel:
+        st.write("")
+        st.write("")
+        if st.button("↩️ 취소", use_container_width=True):
+            _unmark_title_used(last_used["keyword"], last_used["title"])
+            st.rerun()
 
-# 현재 롱테일 결과에 있고 미사용 제목이 남은 키워드만 표시
+# 미사용 제목이 남은 키워드 목록
 available_kws = [
     kw for kw in longtail_kws
     if kw in history and any(not t["used"] for t in history[kw]["titles"])
 ]
-# 히스토리에만 있고 미사용 제목이 남은 키워드 (이전 실행 포함)
 history_only_kws = [
     kw for kw in history
     if kw not in longtail_kws and any(not t["used"] for t in history[kw]["titles"])
@@ -471,21 +478,13 @@ all_pending = available_kws + history_only_kws
 if not all_pending:
     st.caption("미사용 제목이 없습니다. 자동 찾기를 실행해보세요.")
 else:
-    st.caption(f"총 {len(all_pending)}개 키워드 | 제목 선택 후 '사용' 클릭 시 히스토리에 기록됩니다")
+    st.caption(f"총 {len(all_pending)}개 키워드 대기 중")
     for kw in all_pending:
         kw_data = history[kw]
         unused_count = sum(1 for t in kw_data["titles"] if not t["used"])
-        with st.expander(f"📝 {kw}  ({unused_count}개 남음)", expanded=False):
+        with st.expander(f"📝 {kw}  ({unused_count}개 남음)", expanded=True):
             for idx, t in enumerate(kw_data["titles"]):
-                if t["used"]:
-                    col1, col2 = st.columns([8, 2])
-                    with col1:
-                        st.markdown(f"<span style='color:gray;text-decoration:line-through'>{t['title']}</span> ✅ 사용됨", unsafe_allow_html=True)
-                    with col2:
-                        if st.button("취소", key=f"unuse_{kw}_{idx}"):
-                            _unmark_title_used(kw, t["title"])
-                            st.rerun()
-                else:
+                if not t["used"]:
                     col1, col2 = st.columns([8, 2])
                     with col1:
                         label = f"⭐ **{t['title']}**" if t.get("recommended") else t["title"]

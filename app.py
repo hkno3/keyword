@@ -154,6 +154,28 @@ for tab, category in [
 st.divider()
 
 # ── 함수 정의 ─────────────────────────────────────────────
+CATEGORY_KEYWORDS = {
+    "건강":     ["건강", "영양", "비타민", "운동", "질병", "식품", "효능", "증상", "치료", "약", "의료", "다이어트", "피부", "혈당", "혈압", "암", "당뇨", "관절", "면역", "장"],
+    "부동산":   ["부동산", "아파트", "청약", "전세", "월세", "매매", "집값", "분양", "재건축", "임대", "토지", "상가"],
+    "사업":     ["사업", "창업", "프랜차이즈", "소상공인", "자영업", "매출", "폐업", "법인", "스타트업"],
+    "투자":     ["투자", "주식", "코인", "펀드", "ETF", "배당", "수익", "자산", "금리", "재테크"],
+    "정부지원금": ["지원금", "보조금", "정부", "복지", "혜택", "신청", "지원", "수당", "바우처", "장려금"],
+    "보험":     ["보험", "실손", "생명", "자동차보험", "화재", "암보험", "연금", "보장", "보험료"],
+    "대출":     ["대출", "금리", "이자", "신용", "담보", "전세대출", "주택담보", "저금리", "대환"],
+    "법률":     ["법률", "소송", "계약", "위자료", "손해배상", "이혼", "상속", "고소", "변호사", "판결"],
+    "세금":     ["세금", "세율", "절세", "환급", "연말정산", "종합소득세", "부가세", "양도세", "증여세"],
+    "육아출산": ["육아", "출산", "아기", "임신", "산후", "육아휴직", "어린이집", "유아", "태교", "신생아"],
+    "여행":     ["여행", "호텔", "항공", "숙박", "관광", "투어", "패키지", "비자", "해외여행", "국내여행"],
+    "반려동물": ["반려견", "반려묘", "강아지", "고양이", "펫", "동물병원", "사료", "훈련", "분양"],
+}
+
+def _is_relevant_article(title: str, category: str) -> bool:
+    kws = CATEGORY_KEYWORDS.get(category, [])
+    if not kws:
+        return True
+    title_lower = title.lower()
+    return any(kw in title_lower for kw in kws)
+
 def _run_longtail(seed_keywords: list):
     customer_id = os.getenv("NAVER_AD_CUSTOMER_ID", "")
     ad_key = os.getenv("NAVER_AD_API_KEY", "")
@@ -321,6 +343,10 @@ if start_btn:
             if len(collected) >= auto_target:
                 break
             if article["link"] in crawled_links:
+                continue
+
+            # 제목 관련성 체크 (API 호출 없이)
+            if not _is_relevant_article(article["title"], auto_category):
                 continue
 
             status_box.info(f"🔍 [{article['pubDate']}] {article['title'][:50]}...")

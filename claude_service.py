@@ -5,8 +5,8 @@ from groq import Groq
 MODEL = "llama-3.3-70b-versatile"
 
 
-def extract_seed_keywords(article: str, client: Groq) -> list[str]:
-    """기사에서 단일 씨드 키워드 10개 추출 (연관키워드 확장용)"""
+def extract_seed_keywords(article: str, client: Groq) -> tuple[list[str], int]:
+    """기사에서 단일 씨드 키워드 10개 추출. (keywords, total_tokens) 반환"""
     response = client.chat.completions.create(
         model=MODEL,
         max_tokens=400,
@@ -31,17 +31,18 @@ def extract_seed_keywords(article: str, client: Groq) -> list[str]:
 JSON 배열로만 반환: ["키워드1", "키워드2", ...]""",
         }],
     )
+    tokens = response.usage.total_tokens if response.usage else 0
     text = response.choices[0].message.content.strip()
     match = re.search(r"\[.*?\]", text, re.DOTALL)
     if match:
         try:
-            return json.loads(match.group())
+            return json.loads(match.group()), tokens
         except json.JSONDecodeError:
             pass
-    return []
+    return [], tokens
 
 
-def generate_titles(keyword: str, client: Groq) -> tuple[list[str], str]:
+def generate_titles(keyword: str, client: Groq) -> tuple[list[str], str, int]:
     """키워드로 블로그 제목 5개 생성 + 추천 1개 반환"""
     response = client.chat.completions.create(
         model=MODEL,
@@ -84,6 +85,7 @@ STEP 3에서 판별한 심리 상태에 맞게 제목 5개를 생성하고,
 {{"titles": ["제목1", "제목2", "제목3", "제목4", "제목5"], "recommended": "titles 중 하나와 정확히 동일한 추천 제목"}}""",
         }],
     )
+    tokens = response.usage.total_tokens if response.usage else 0
     text = response.choices[0].message.content.strip()
     match = re.search(r'\{.*?"titles".*?\}', text, re.DOTALL)
     if match:
@@ -92,18 +94,18 @@ STEP 3에서 판별한 심리 상태에 맞게 제목 5개를 생성하고,
             titles = data.get("titles", [])
             recommended = data.get("recommended", titles[0] if titles else "")
             if titles:
-                return titles, recommended
+                return titles, recommended, tokens
         except json.JSONDecodeError:
             pass
     match = re.search(r"\[.*?\]", text, re.DOTALL)
     if match:
         try:
             titles = json.loads(match.group())
-            return titles, titles[0] if titles else ""
+            return titles, titles[0] if titles else "", tokens
         except json.JSONDecodeError:
             pass
     fallback = f"{keyword} 제대로 알고 활용하는 방법 5가지"
-    return [fallback], fallback
+    return [fallback], fallback, tokens
 
 
 def validate_title(title: str, keyword: str) -> dict:

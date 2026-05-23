@@ -294,6 +294,7 @@ if start_btn:
         st.error("Groq API 키를 입력해주세요.")
     else:
         st.session_state.auto_running = True
+        st.session_state.auto_keywords = []  # 매번 새로 시작
         groq_client = Groq(api_key=groq_key)
         customer_id = os.getenv("NAVER_AD_CUSTOMER_ID", "")
         ad_key = os.getenv("NAVER_AD_API_KEY", "")
@@ -331,17 +332,22 @@ if start_btn:
             st.session_state.auto_crawled.append({"link": article["link"], "pubDate": article["pubDate"], "title": article["title"]})
 
             if not text:
+                status_box.warning("⚠️ 본문 없음 → 다음 기사")
                 continue
 
             # AI 씨드 추출
             try:
                 seeds = claude_service.extract_seed_keywords(text, groq_client)
                 seeds = [s for s in seeds if len(s.strip()) >= 2]
-            except Exception:
+            except Exception as e:
+                status_box.warning(f"⚠️ 씨드 추출 실패: {e}")
                 continue
 
             if not seeds:
+                status_box.warning("⚠️ 씨드 키워드 없음 → 다음 기사")
                 continue
+
+            status_box.info(f"🌱 씨드: {', '.join(seeds[:5])}")
 
             # 자동완성
             autocomplete_kws = []
@@ -358,6 +364,7 @@ if start_btn:
             to_lookup = {k: v for k, v in related.items() if v["total_search"] >= 2000}
 
             if not to_lookup:
+                status_box.warning(f"⚠️ 검색량 2000 이상 키워드 없음 ({len(related)}개 조회) → 다음 기사")
                 continue
 
             # 문서수 조회

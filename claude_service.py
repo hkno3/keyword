@@ -26,7 +26,7 @@ def extract_seed_keywords(article: str, client: Groq) -> tuple[list[str], int]:
 좋은 예 (기사 주제가 김치라면): 김치, 유산균, 발효, 젖산균, 배추
 
 기사:
-{article[:2000]}
+{article[:500]}
 
 JSON 배열로만 반환: ["키워드1", "키워드2", ...]""",
         }],

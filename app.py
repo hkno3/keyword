@@ -71,10 +71,15 @@ st.caption("뉴스 기사를 붙여넣으면 경쟁 낮은 블로그 키워드�
 with st.sidebar:
     st.header("⚙️ API 설정")
     groq_key = st.text_input(
-        "Groq API Key",
+        "Groq API Key 1",
         value=os.getenv("GROQ_API_KEY", ""),
         type="password",
         help="https://console.groq.com 에서 발급 (무료)",
+    )
+    groq_key2 = st.text_input(
+        "Groq API Key 2 (한도 초과 시 자동 전환)",
+        value=os.getenv("GROQ_API_KEY2", ""),
+        type="password",
     )
     st.divider()
     naver_ok = bool(os.getenv("NAVER_AD_API_KEY")) and bool(os.getenv("NAVER_CLIENT_ID"))
@@ -317,7 +322,9 @@ if start_btn:
     else:
         st.session_state.auto_running = True
         st.session_state.auto_keywords = []  # 매번 새로 시작
-        groq_client = Groq(api_key=groq_key)
+        groq_keys = [k for k in [groq_key, groq_key2] if k.strip()]
+        groq_key_idx = 0
+        groq_client = Groq(api_key=groq_keys[0])
         customer_id = os.getenv("NAVER_AD_CUSTOMER_ID", "")
         ad_key = os.getenv("NAVER_AD_API_KEY", "")
         ad_secret = os.getenv("NAVER_AD_SECRET_KEY", "")
@@ -368,14 +375,22 @@ if start_btn:
             except Exception as e:
                 err_str = str(e)
                 if "429" in err_str or "rate_limit" in err_str.lower():
-                    import re as _re
-                    wait_match = _re.search(r"try again in ([\d]+m[\d.]+s|[\d.]+s)", err_str)
-                    wait_msg = f" ({wait_match.group(1)} 후 재시도)" if wait_match else ""
-                    status_box.error(f"🚫 Groq 하루 토큰 한도 초과{wait_msg}. 내일 다시 시도하거나 Dev Tier로 업그레이드하세요.")
-                    st.session_state.auto_running = False
-                    break
-                status_box.warning(f"⚠️ 씨드 추출 실패: {e}")
-                continue
+                    groq_key_idx += 1
+                    if groq_key_idx < len(groq_keys):
+                        groq_client = Groq(api_key=groq_keys[groq_key_idx])
+                        status_box.warning(f"⚠️ Key {groq_key_idx} 한도 초과 → Key {groq_key_idx + 1}로 전환")
+                        try:
+                            seeds = claude_service.extract_seed_keywords(text, groq_client)
+                            seeds = [s for s in seeds if len(s.strip()) >= 2]
+                        except Exception:
+                            continue
+                    else:
+                        status_box.error("🚫 모든 Groq API 키 한도 초과. 내일 다시 시도하세요.")
+                        st.session_state.auto_running = False
+                        break
+                else:
+                    status_box.warning(f"⚠️ 씨드 추출 실패: {e}")
+                    continue
 
             if not seeds:
                 status_box.warning("⚠️ 씨드 키워드 없음 → 다음 기사")

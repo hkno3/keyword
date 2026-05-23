@@ -1075,7 +1075,7 @@ if st.session_state.blog_gen_target:
                         sched_min = st.number_input("분", min_value=0, max_value=59, value=0, step=10, key="sched_min")
 
                     scheduled_dt = f"{sched_date}T{str(sched_hour).zfill(2)}:{str(sched_min).zfill(2)}:00"
-                    st.caption(f"예약 시간: {scheduled_dt}")
+                    st.caption(f"예약 시간: {sched_date} {str(sched_hour).zfill(2)}:{str(sched_min).zfill(2)}")
 
                     col_confirm, col_cancel = st.columns(2)
                     with col_confirm:

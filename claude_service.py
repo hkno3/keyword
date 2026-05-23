@@ -241,7 +241,7 @@ JSON 외 다른 텍스트는 절대 출력하지 마세요.
     return result or {}, tokens
 
 
-
+def _has_japanese(text: str) -> bool:
     return any('぀' <= c <= 'ヿ' for c in text)
 
 def _filter_titles(titles: list[str]) -> list[str]:

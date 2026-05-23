@@ -294,6 +294,7 @@ if start_btn:
         st.error("Groq API 키를 입력해주세요.")
     else:
         st.session_state.auto_running = True
+        st.session_state.auto_keywords = []  # 매번 새로 시작
         groq_client = Groq(api_key=groq_key)
         customer_id = os.getenv("NAVER_AD_CUSTOMER_ID", "")
         ad_key = os.getenv("NAVER_AD_API_KEY", "")

@@ -1062,17 +1062,18 @@ if st.session_state.blog_gen_target:
                 from datetime import date, time as dtime, timedelta
                 with st.container(border=True):
                     st.caption("예약 발행 날짜/시간 설정")
+                    _now = datetime.now()
                     col_d, col_t = st.columns(2)
                     with col_d:
                         sched_date = st.date_input(
                             "날짜",
-                            value=datetime.now().date() + timedelta(days=1),
-                            min_value=datetime.now().date(),
+                            value=_now.date(),
+                            min_value=_now.date(),
                             key="sched_date",
                         )
                     with col_t:
-                        sched_hour = st.number_input("시", min_value=0, max_value=23, value=9, key="sched_hour")
-                        sched_min = st.number_input("분", min_value=0, max_value=59, value=0, step=10, key="sched_min")
+                        sched_hour = st.number_input("시", min_value=0, max_value=23, value=_now.hour, key="sched_hour")
+                        sched_min = st.number_input("분", min_value=0, max_value=59, value=(_now.minute // 10) * 10, step=10, key="sched_min")
 
                     scheduled_dt = f"{sched_date}T{str(sched_hour).zfill(2)}:{str(sched_min).zfill(2)}:00"
                     st.caption(f"예약 시간: {sched_date} {str(sched_hour).zfill(2)}:{str(sched_min).zfill(2)}")

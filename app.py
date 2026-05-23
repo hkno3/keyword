@@ -171,7 +171,8 @@ with st.sidebar:
     for i, src in enumerate(sm_sources):
         c1, c2, c3 = st.columns([4, 1, 1])
         with c1:
-            st.caption(f"**{src['name']}**")
+            st.markdown(f"**{src['name']}**")
+            st.caption(src["url"][:40] + "..." if len(src["url"]) > 40 else src["url"])
         with c2:
             if st.button("🔄", key=f"sm_reload_{i}", help="이 시트만 업데이트"):
                 with st.spinner("불러오는 중..."):

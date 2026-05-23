@@ -42,6 +42,36 @@ JSON 배열로만 반환: ["키워드1", "키워드2", ...]""",
     return [], tokens
 
 
+def generate_title_single(keyword: str, client: Groq) -> tuple[str, int]:
+    """키워드로 블로그 제목 1개 생성. (title, total_tokens) 반환"""
+    response = client.chat.completions.create(
+        model=MODEL,
+        max_tokens=200,
+        messages=[{
+            "role": "user",
+            "content": f"""당신은 네이버 블로그 SEO 전문가입니다.
+
+키워드: "{keyword}"
+
+## 제목 생성 규칙
+1. 키워드를 제목 맨 앞 15자 이내 배치 — 키워드의 띄어쓰기·글자 완전히 동일하게
+2. 공백 포함 24~30자
+3. 숫자 반드시 1개 이상 포함 (개수/기간/연도/금액 등)
+4. 특수기호 사용 금지
+5. 홍보성 단어 금지 (이벤트·강추·무료·공짜·할인·1위 등)
+6. 제목 마무리는 명사형 (~방법, ~총정리, ~조건, ~기준, ~이유 등)
+7. 반드시 한국어(한글)로만 작성 — 일본어 절대 금지
+
+독자의 검색 의도에 맞는 제목 1개만 반환 (제목 텍스트만, 따옴표·설명 없이):""",
+        }],
+    )
+    tokens = response.usage.total_tokens if response.usage else 0
+    title = response.choices[0].message.content.strip().strip('"\'')
+    if _has_japanese(title) or not title:
+        title = f"{keyword} 완벽 정리 3가지 핵심 방법"
+    return title, tokens
+
+
 def generate_titles(keyword: str, client: Groq) -> tuple[list[str], str, int]:
     """키워드로 블로그 제목 3개 생성 + 추천 1개 반환"""
     response = client.chat.completions.create(

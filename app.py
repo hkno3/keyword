@@ -117,7 +117,7 @@ for key in ["auto_keywords", "auto_crawled", "auto_running"]:
 
 crawled_file_links = _load_crawled_links()
 
-col_cat, col_num, col_btn1, col_btn2 = st.columns([2, 1, 1, 1])
+col_cat, col_num, col_stars, col_btn1, col_btn2 = st.columns([2, 1, 1, 1, 1])
 with col_cat:
     auto_category = st.selectbox("카테고리", [
         "건강", "부동산", "사업", "투자", "정부지원금",
@@ -125,6 +125,8 @@ with col_cat:
     ], label_visibility="collapsed")
 with col_num:
     auto_target = st.number_input("찾을 키워드 수", min_value=1, value=10, step=1, label_visibility="collapsed")
+with col_stars:
+    auto_min_stars = st.number_input("최소 별 개수", min_value=1, max_value=5, value=3, step=1, label_visibility="collapsed")
 with col_btn1:
     start_btn = st.button("🤖 자동 찾기", type="primary", use_container_width=True)
 with col_btn2:
@@ -245,11 +247,13 @@ if start_btn:
             doc_counts = naver_api.get_doc_counts_parallel(list(to_lookup.keys()), naver_id, naver_secret)
             table = naver_api.build_keyword_table(to_lookup, doc_counts)
 
-            # 별 3개 이상 + 클릭률 1% 이상 + 중복 제거
+            # 최소 별 개수 + 클릭률 1% 이상 + 중복 제거
+            all_stars = ["⭐", "⭐⭐", "⭐⭐⭐", "⭐⭐⭐⭐", "⭐⭐⭐⭐⭐"]
+            valid_stars = set(all_stars[auto_min_stars - 1:])
             for r in table:
                 if len(collected) >= auto_target:
                     break
-                if r["stars"] in ("⭐⭐⭐", "⭐⭐⭐⭐", "⭐⭐⭐⭐⭐") and \
+                if r["stars"] in valid_stars and \
                    (r["pc_ctr"] >= 1 or r["mobile_ctr"] >= 1) and \
                    r["keyword"] not in collected_kws:
                     r["source_title"] = article["title"]

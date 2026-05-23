@@ -373,12 +373,18 @@ def _generate_and_save_titles(groq_client):
     to_generate = [r for r in filtered if r["keyword"] not in history]
 
     if not filtered:
-        st.warning(f"⚠️ 모바일 클릭률 2% 이상 키워드가 없어요. 롱테일 전체: {len(longtail)}개")
+        st.session_state.title_gen_msg = {
+            "type": "warning",
+            "text": f"⚠️ 모바일 클릭률 2% 이상 키워드가 없어요. 롱테일 전체: {len(longtail)}개\n아래 '제목 생성' 버튼으로 전체 키워드에서 생성할 수 있습니다."
+        }
         st.session_state.keywords_history = history
         return
 
     if not to_generate:
-        st.info(f"📂 클릭률 2%↑ 키워드 {len(filtered)}개 모두 히스토리에 있어요. 제목 대기열을 확인하세요.")
+        st.session_state.title_gen_msg = {
+            "type": "info",
+            "text": f"📂 클릭률 2%↑ 키워드 {len(filtered)}개 모두 이미 히스토리에 있어요."
+        }
         st.session_state.keywords_history = history
         return
 
@@ -410,8 +416,17 @@ def _generate_and_save_titles(groq_client):
     title_status.empty()
     title_progress.empty()
 
+    generated = len(to_generate) - len(errors)
     if errors:
-        st.warning(f"⚠️ 제목 생성 실패 {len(errors)}건:\n" + "\n".join(errors[:3]))
+        st.session_state.title_gen_msg = {
+            "type": "warning",
+            "text": f"✅ {generated}개 생성됨 | ⚠️ 실패 {len(errors)}건: {errors[0]}"
+        }
+    else:
+        st.session_state.title_gen_msg = {
+            "type": "success",
+            "text": f"✅ 제목 {generated * 3}개 생성 완료! 아래 제목 대기열을 확인하세요."
+        }
 
     st.session_state.keywords_history = history
 
@@ -432,6 +447,8 @@ if "blog_gen_target" not in st.session_state:
     st.session_state.blog_gen_target = None
 if "blog_gen_result" not in st.session_state:
     st.session_state.blog_gen_result = None
+if "title_gen_msg" not in st.session_state:
+    st.session_state.title_gen_msg = None
 
 crawled_file_links = _load_crawled_links()
 groq_keys = [k for k in [groq_key, groq_key2] if k.strip()]
@@ -689,9 +706,58 @@ if st.session_state.longtail_table:
 <style>button{{padding:8px 20px;background:#ff4b4b;color:white;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-family:sans-serif}}</style>
 """, height=50)
 
+    col_gen1, col_gen2 = st.columns(2)
+    with col_gen1:
+        if st.button("✍️ 클릭률 2%↑만 제목 생성", use_container_width=True, disabled=not groq_key):
+            _generate_and_save_titles(Groq(api_key=groq_keys[st.session_state.get("groq_key_idx", 0)]))
+            st.rerun()
+    with col_gen2:
+        if st.button("✍️ 전체 키워드 제목 생성", use_container_width=True, disabled=not groq_key):
+            history_all = _load_keywords_history()
+            longtail_all = st.session_state.get("longtail_table", [])
+            to_gen_all = [r for r in longtail_all if r["keyword"] not in history_all]
+            if not to_gen_all:
+                st.session_state.title_gen_msg = {"type": "info", "text": "📂 전체 키워드 모두 이미 히스토리에 있어요."}
+            else:
+                groq_client_all = Groq(api_key=groq_keys[st.session_state.get("groq_key_idx", 0)])
+                today_all = datetime.now().strftime("%Y-%m-%d")
+                prog = st.progress(0)
+                for i, row in enumerate(to_gen_all):
+                    kw = row["keyword"]
+                    try:
+                        titles, recommended, tokens = claude_service.generate_titles(kw, groq_client_all)
+                        _add_groq_tokens(tokens)
+                        history_all[kw] = {
+                            "first_found": today_all,
+                            "titles": [{"title": t, "used": False, "recommended": t == recommended} for t in titles],
+                        }
+                        _save_keywords_history(history_all)
+                    except Exception as e:
+                        pass
+                    prog.progress((i + 1) / len(to_gen_all))
+                    time.sleep(0.3)
+                prog.empty()
+                st.session_state.keywords_history = history_all
+                st.session_state.title_gen_msg = {
+                    "type": "success",
+                    "text": f"✅ {len(to_gen_all)}개 키워드 제목 생성 완료! 아래 제목 대기열을 확인하세요."
+                }
+            st.rerun()
+
 # ── 제목 대기열 ──────────────────────────────────────────
 st.divider()
 st.subheader("✍️ 제목 대기열")
+
+# 제목 생성 결과 메시지 표시
+if st.session_state.get("title_gen_msg"):
+    msg = st.session_state.title_gen_msg
+    if msg["type"] == "success":
+        st.success(msg["text"])
+    elif msg["type"] == "warning":
+        st.warning(msg["text"])
+    else:
+        st.info(msg["text"])
+    st.session_state.title_gen_msg = None
 
 history = st.session_state.get("keywords_history", {})
 longtail_kws = {r["keyword"] for r in st.session_state.get("longtail_table", [])}

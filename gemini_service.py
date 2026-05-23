@@ -57,9 +57,9 @@ JSON 외 다른 텍스트는 절대 출력하지 마세요. 인용 표시([1], [
 ▶ 허용 태그
 <h2> <h3> <h4> <p> <strong> <table> <tr> <th> <td> <ul> <ol> <li> <br> <a>
 - <h1> 절대 사용 금지 (워드프레스 제목과 중복)
-- CSS 스타일 속성 금지 (인라인 style 포함)
-- <a> 태그는 입력값(internal_links, related_posts)으로 제공된 URL에만 사용 가능
-- 입력값에 없는 URL을 <a> 태그로 직접 생성 절대 금지
+- CSS 스타일 속성 금지 (인라인 style 포함) — 단, 공공기관 버튼 <p style="..."> 에 한해 예외 허용
+- <a> 태그는 입력값(internal_links, related_posts) 또는 공공기관 공식 URL에만 사용 가능
+- 입력값에 없는 일반 URL을 <a> 태그로 직접 생성 절대 금지
 - HTML 속성값은 반드시 작은따옴표 사용: href='url' (쌍따옴표 href="url" 절대 금지)
 - JSON 문자열 내 줄바꿈은 \\n으로 표현
 
@@ -111,6 +111,34 @@ JSON 외 다른 텍스트는 절대 출력하지 마세요. 인용 표시([1], [
 - 친근하고 자연스러운 대화체
 - 짧고 긴 문장 혼합
 - 감정 표현 적극 사용
+
+▶ 공공기관 버튼 삽입 규칙
+- Google 검색으로 문맥에 맞는 공공기관 공식 사이트를 찾아 본문 중간에 버튼 형태로 삽입
+- 글 전체 기준 1~2개 삽입
+- 독자가 실제로 행동해야 할 섹션에 우선 배치 (신청·조회·예약·신고 등)
+- 단순 설명만 하는 문단에는 삽입하지 않음
+- 각 섹션당 최대 1개
+
+허용 도메인:
+- .go.kr (정부기관) ✅
+- .or.kr (공공기관) ✅
+- .com, .co.kr 절대 금지 ❌
+
+버튼 형식 (반드시 이 형식 그대로):
+<p style='background:#FF6B35; color:white; padding:15px 25px; text-align:center; border-radius:8px; margin:20px auto; display:flex; align-items:center; justify-content:center;'>
+  <a href='공공기관URL' style='color:white; text-decoration:none; font-weight:bold; font-size:22px;'>📌 기관명 - 구체적 행동</a>
+</p>
+
+버튼 텍스트 규칙:
+- ✅ 좋은 예: 📌 국민건강보험공단 - 검진 예약하기
+- ❌ 나쁜 예: 📌 국민건강보험공단 바로가기 (구체적 행동 없음)
+
+URL 검증 절차:
+1. 현재 문단 핵심 키워드 파악
+2. "키워드 + 공공기관" 또는 "키워드 + 정부 사이트"로 검색
+3. .go.kr, .or.kr 도메인만 선택
+4. 검색으로 확인된 URL만 사용 — 불확실하면 버튼 삽입하지 않음
+5. 억지로 관련 없는 기관 연결 금지
 
 [제목 작성 원칙]
 - 25자 이내, 특수문자 금지

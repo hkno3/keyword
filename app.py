@@ -141,6 +141,70 @@ for tab, category in [
 
 st.divider()
 
+# ── 함수 정의 ─────────────────────────────────────────────
+def _run_longtail(seed_keywords: list):
+    customer_id = os.getenv("NAVER_AD_CUSTOMER_ID", "")
+    ad_key = os.getenv("NAVER_AD_API_KEY", "")
+    ad_secret = os.getenv("NAVER_AD_SECRET_KEY", "")
+    naver_id = os.getenv("NAVER_CLIENT_ID", "")
+    naver_secret = os.getenv("NAVER_CLIENT_SECRET", "")
+
+    with st.spinner("자동완성 수집 중..."):
+        ac_all = []
+        for kw in seed_keywords:
+            ac = naver_api.get_autocomplete(kw)
+            ac_all.extend(ac)
+        ac_all = list(dict.fromkeys(ac_all))
+
+    if not ac_all:
+        st.warning("자동완성 키워드를 찾을 수 없어요.")
+        return
+
+    with st.spinner(f"검색량 조회 중... ({len(ac_all)}개)"):
+        related = naver_api.get_search_volumes_batch(ac_all, customer_id, ad_key, ad_secret)
+
+    with st.spinner(f"문서수 조회 중... ({len(related)}개)"):
+        doc_counts = naver_api.get_doc_counts_parallel(list(related.keys()), naver_id, naver_secret)
+
+    table = naver_api.build_keyword_table(related, doc_counts)
+    st.session_state.longtail_table = table
+
+def _generate_and_save_titles(groq_client):
+    history = _load_keywords_history()
+    longtail = st.session_state.get("longtail_table", [])
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    to_generate = [r for r in longtail if r["keyword"] not in history]
+
+    if not to_generate:
+        st.session_state.keywords_history = history
+        return
+
+    title_status = st.empty()
+    title_progress = st.progress(0)
+
+    for i, row in enumerate(to_generate):
+        kw = row["keyword"]
+        title_status.info(f"✍️ 제목 생성 중: {kw} ({i+1}/{len(to_generate)})")
+        try:
+            titles, recommended = claude_service.generate_titles(kw, groq_client)
+            history[kw] = {
+                "first_found": today,
+                "titles": [
+                    {"title": t, "used": False, "recommended": t == recommended}
+                    for t in titles
+                ],
+            }
+            _save_keywords_history(history)
+        except Exception:
+            pass
+        title_progress.progress((i + 1) / len(to_generate))
+        time.sleep(0.3)
+
+    title_status.empty()
+    title_progress.empty()
+    st.session_state.keywords_history = history
+
 # ── 자동 키워드 찾기 ─────────────────────────────────────
 st.subheader("🤖 자동 키워드 찾기")
 
@@ -328,70 +392,6 @@ with col_lt2:
 
 auto_lt_btn = st.button("⭐ 황금 키워드로 롱테일 찾기", use_container_width=True,
                          disabled=len(st.session_state.auto_keywords) == 0)
-
-def _run_longtail(seed_keywords: list):
-    customer_id = os.getenv("NAVER_AD_CUSTOMER_ID", "")
-    ad_key = os.getenv("NAVER_AD_API_KEY", "")
-    ad_secret = os.getenv("NAVER_AD_SECRET_KEY", "")
-    naver_id = os.getenv("NAVER_CLIENT_ID", "")
-    naver_secret = os.getenv("NAVER_CLIENT_SECRET", "")
-
-    with st.spinner("자동완성 수집 중..."):
-        ac_all = []
-        for kw in seed_keywords:
-            ac = naver_api.get_autocomplete(kw)
-            ac_all.extend(ac)
-        ac_all = list(dict.fromkeys(ac_all))
-
-    if not ac_all:
-        st.warning("자동완성 키워드를 찾을 수 없어요.")
-        return
-
-    with st.spinner(f"검색량 조회 중... ({len(ac_all)}개)"):
-        related = naver_api.get_search_volumes_batch(ac_all, customer_id, ad_key, ad_secret)
-
-    with st.spinner(f"문서수 조회 중... ({len(related)}개)"):
-        doc_counts = naver_api.get_doc_counts_parallel(list(related.keys()), naver_id, naver_secret)
-
-    table = naver_api.build_keyword_table(related, doc_counts)
-    st.session_state.longtail_table = table
-
-def _generate_and_save_titles(groq_client):
-    history = _load_keywords_history()
-    longtail = st.session_state.get("longtail_table", [])
-    today = datetime.now().strftime("%Y-%m-%d")
-
-    # 새로 생성이 필요한 키워드만 추림 (히스토리에 없는 것)
-    to_generate = [r for r in longtail if r["keyword"] not in history]
-
-    if not to_generate:
-        st.session_state.keywords_history = history
-        return
-
-    title_status = st.empty()
-    title_progress = st.progress(0)
-
-    for i, row in enumerate(to_generate):
-        kw = row["keyword"]
-        title_status.info(f"✍️ 제목 생성 중: {kw} ({i+1}/{len(to_generate)})")
-        try:
-            titles, recommended = claude_service.generate_titles(kw, groq_client)
-            history[kw] = {
-                "first_found": today,
-                "titles": [
-                    {"title": t, "used": False, "recommended": t == recommended}
-                    for t in titles
-                ],
-            }
-            _save_keywords_history(history)
-        except Exception:
-            pass
-        title_progress.progress((i + 1) / len(to_generate))
-        time.sleep(0.3)
-
-    title_status.empty()
-    title_progress.empty()
-    st.session_state.keywords_history = history
 
 if auto_lt_btn:
     seed_kws = [r["keyword"] for r in st.session_state.auto_keywords]

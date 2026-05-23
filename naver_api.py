@@ -249,3 +249,34 @@ def competition_level(search_volume: int, doc_count: int):
         return "높음", "⭐⭐", ratio
     else:
         return "매우 높음", "⭐", ratio
+
+
+def _naver_search(query: str, search_type: str, client_id: str, client_secret: str, display: int = 5) -> list[dict]:
+    """네이버 검색 API 공통 함수. search_type: news | blog | webkr"""
+    url = f"{SEARCH_API_BASE_URL}/v1/search/{search_type}"
+    headers = {"X-Naver-Client-Id": client_id, "X-Naver-Client-Secret": client_secret}
+    params = {"query": query, "display": display, "sort": "date"}
+    try:
+        r = requests.get(url, headers=headers, params=params, timeout=10)
+        r.raise_for_status()
+        return r.json().get("items", [])
+    except Exception:
+        return []
+
+
+def search_news(keyword: str, client_id: str, client_secret: str, display: int = 5) -> list[str]:
+    """네이버 뉴스 검색 → URL 목록 반환"""
+    items = _naver_search(keyword, "news", client_id, client_secret, display)
+    return [item["link"] for item in items if item.get("link")]
+
+
+def search_blog(keyword: str, client_id: str, client_secret: str, display: int = 5) -> list[str]:
+    """네이버 블로그 검색 → URL 목록 반환"""
+    items = _naver_search(keyword, "blog", client_id, client_secret, display)
+    return [item["link"] for item in items if item.get("link")]
+
+
+def search_web(keyword: str, client_id: str, client_secret: str, display: int = 5) -> list[str]:
+    """네이버 웹 검색 → URL 목록 반환"""
+    items = _naver_search(keyword, "webkr", client_id, client_secret, display)
+    return [item["link"] for item in items if item.get("link")]

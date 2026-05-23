@@ -246,12 +246,20 @@ def _generate_and_save_titles(groq_client):
     longtail = st.session_state.get("longtail_table", [])
     today = datetime.now().strftime("%Y-%m-%d")
 
-    to_generate = [r for r in longtail if r["keyword"] not in history]
+    filtered = [r for r in longtail if r.get("mobile_ctr", 0) >= 2]
+    to_generate = [r for r in filtered if r["keyword"] not in history]
 
-    if not to_generate:
-        st.info(f"📂 롱테일 키워드 {len(longtail)}개 모두 히스토리에 있어요. 제목 대기열을 확인하세요.")
+    if not filtered:
+        st.warning(f"⚠️ 모바일 클릭률 2% 이상 키워드가 없어요. 롱테일 전체: {len(longtail)}개")
         st.session_state.keywords_history = history
         return
+
+    if not to_generate:
+        st.info(f"📂 클릭률 2%↑ 키워드 {len(filtered)}개 모두 히스토리에 있어요. 제목 대기열을 확인하세요.")
+        st.session_state.keywords_history = history
+        return
+
+    st.info(f"✍️ 클릭률 2%↑ 키워드 {len(filtered)}개 중 {len(to_generate)}개 제목 생성 시작")
 
     title_status = st.empty()
     title_progress = st.progress(0)
@@ -600,14 +608,30 @@ else:
         with st.expander(f"📝 {kw}  ({unused_count}개 남음)", expanded=True):
             for idx, t in enumerate(kw_data["titles"]):
                 if not t["used"]:
-                    col1, col2 = st.columns([8, 2])
+                    star = "⭐ " if t.get("recommended") else ""
+                    edited = st.text_input(
+                        label=f"{star}제목 {idx+1}",
+                        value=t["title"],
+                        key=f"edit_{kw}_{idx}",
+                        label_visibility="collapsed",
+                    )
+                    col1, col2 = st.columns([3, 1])
                     with col1:
-                        label = f"⭐ **{t['title']}**" if t.get("recommended") else t["title"]
-                        st.markdown(label)
+                        if edited != t["title"]:
+                            if st.button("💾 저장", key=f"save_{kw}_{idx}"):
+                                h = _load_keywords_history()
+                                h[kw]["titles"][idx]["title"] = edited
+                                _save_keywords_history(h)
+                                st.session_state.keywords_history = h
+                                st.rerun()
                     with col2:
                         if st.button("사용", key=f"use_{kw}_{idx}"):
-                            _mark_title_used(kw, t["title"])
-                            st.session_state.keywords_history = _load_keywords_history()
+                            title_to_use = st.session_state.get(f"edit_{kw}_{idx}", t["title"])
+                            h = _load_keywords_history()
+                            h[kw]["titles"][idx]["title"] = title_to_use
+                            h[kw]["titles"][idx]["used"] = True
+                            _save_keywords_history(h)
+                            st.session_state.keywords_history = h
                             st.rerun()
 
 # ── 세션 초기화 ───────────────────────────────────────────

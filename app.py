@@ -362,8 +362,13 @@ if "groq_tokens" not in st.session_state:
 for key in ["naver_ad_calls", "naver_search_calls"]:
     if key not in st.session_state:
         st.session_state[key] = 0
+if "blog_gen_target" not in st.session_state:
+    st.session_state.blog_gen_target = None
+if "blog_gen_result" not in st.session_state:
+    st.session_state.blog_gen_result = None
 
 crawled_file_links = _load_crawled_links()
+groq_keys = [k for k in [groq_key, groq_key2] if k.strip()]
 
 col_cat, col_num, col_stars, col_btn1, col_btn2 = st.columns([2, 1, 1, 1, 1])
 with col_cat:
@@ -426,7 +431,6 @@ if start_btn:
     else:
         st.session_state.auto_running = True
         st.session_state.auto_keywords = []  # 매번 새로 시작
-        groq_keys = [k for k in [groq_key, groq_key2] if k.strip()]
         groq_key_idx = 0
         groq_client = Groq(api_key=groq_keys[0])
         customer_id = os.getenv("NAVER_AD_CUSTOMER_ID", "")
@@ -689,7 +693,125 @@ else:
                             h[kw]["titles"][idx]["used"] = True
                             _save_keywords_history(h)
                             st.session_state.keywords_history = h
+                            st.session_state.blog_gen_target = {"keyword": kw, "title": title_to_use}
+                            st.session_state.blog_gen_result = None
                             st.rerun()
+
+# ── 블로그 글 생성 ────────────────────────────────────────
+if st.session_state.blog_gen_target:
+    target = st.session_state.blog_gen_target
+    st.divider()
+
+    col_title, col_close = st.columns([8, 2])
+    with col_title:
+        st.subheader("✍️ 블로그 글 생성")
+        st.caption(f"키워드: `{target['keyword']}`")
+    with col_close:
+        st.write("")
+        st.write("")
+        if st.button("✕ 닫기", use_container_width=True):
+            st.session_state.blog_gen_target = None
+            st.session_state.blog_gen_result = None
+            st.rerun()
+
+    gen_title = st.text_input("제목", value=target["title"], key="blog_gen_title")
+    gen_summary = st.text_area(
+        "기사 요약 (선택 — 최대 2,000자)",
+        value=st.session_state.get("article_text", "")[:2000],
+        height=150,
+        placeholder="기사 내용을 붙여넣으세요. 없으면 비워두세요.",
+        key="blog_gen_summary",
+    )
+
+    col_il, col_rp = st.columns(2)
+    with col_il:
+        gen_internal = st.text_area(
+            "내부링크 (한 줄에 하나씩, 선택)",
+            height=100,
+            placeholder="https://bodyandwell.com/관련-포스트/",
+            key="blog_gen_internal",
+        )
+    with col_rp:
+        gen_related = st.text_area(
+            "함께 보면 좋은 글 URL 3개 (선택)",
+            height=100,
+            placeholder="https://bodyandwell.com/관련-포스트/",
+            key="blog_gen_related",
+        )
+
+    if not groq_key:
+        st.error("Groq API 키를 입력해주세요.")
+    else:
+        if st.button("✍️ 글 생성", type="primary", use_container_width=True):
+            active_key = groq_keys[st.session_state.get("groq_key_idx", 0)] if groq_keys else groq_key
+            groq_client = Groq(api_key=active_key)
+            internal_list = [u.strip() for u in gen_internal.splitlines() if u.strip()] or None
+            related_list = [u.strip() for u in gen_related.splitlines() if u.strip()] or None
+            summary_text = gen_summary.strip()[:2000]
+
+            with st.spinner("글 생성 중... (30~60초 소요)"):
+                post_data, tokens = claude_service.generate_blog_post(
+                    keyword=target["keyword"],
+                    title=gen_title,
+                    client=groq_client,
+                    summary=summary_text,
+                    internal_links=internal_list,
+                    related_posts=related_list,
+                )
+                _add_groq_tokens(tokens)
+
+            if post_data:
+                st.session_state.blog_gen_result = post_data
+                st.success(f"✅ 글 생성 완료! (토큰: {tokens:,})")
+            else:
+                st.error("❌ JSON 파싱 실패. 다시 시도해보세요.")
+
+    if st.session_state.blog_gen_result:
+        result = st.session_state.blog_gen_result
+        st.divider()
+
+        col_r1, col_r2 = st.columns(2)
+        with col_r1:
+            st.markdown(f"**제목:** {result.get('title', '')}")
+            st.markdown(f"**포커스 키워드:** {result.get('focus_keyword', '')}")
+        with col_r2:
+            st.markdown(f"**메타 설명:** {result.get('meta_description', '')}")
+            st.markdown(f"**태그:** {', '.join(result.get('tags', []))}")
+
+        with st.expander("📄 HTML 코드 보기"):
+            st.code(result.get("content", ""), language="html")
+
+        with st.expander("👁️ 렌더링 미리보기", expanded=True):
+            st.html(result.get("content", ""))
+
+        wp_sites = _load_wp_sites()
+        if wp_sites:
+            col_site, col_draft, col_pub = st.columns([3, 2, 2])
+            with col_site:
+                selected_site_name = st.selectbox(
+                    "발행 사이트", [s["name"] for s in wp_sites], key="blog_wp_site"
+                )
+                selected_site = next(s for s in wp_sites if s["name"] == selected_site_name)
+            with col_draft:
+                st.write("")
+                if st.button("📝 초안 저장", use_container_width=True):
+                    with st.spinner("업로드 중..."):
+                        try:
+                            r = wp_service.publish_post(selected_site, result, pub_status="draft")
+                            st.success(f"✅ 초안 저장됨  \n{r.get('link', '')}")
+                        except Exception as e:
+                            st.error(f"❌ 실패: {e}")
+            with col_pub:
+                st.write("")
+                if st.button("🚀 바로 게시", type="primary", use_container_width=True):
+                    with st.spinner("게시 중..."):
+                        try:
+                            r = wp_service.publish_post(selected_site, result, pub_status="publish")
+                            st.success(f"✅ 게시 완료  \n{r.get('link', '')}")
+                        except Exception as e:
+                            st.error(f"❌ 실패: {e}")
+        else:
+            st.warning("⚠️ 사이드바에서 WordPress 사이트를 먼저 등록해주세요.")
 
 # ── 세션 초기화 ───────────────────────────────────────────
 for key in ["keyword_table", "selected_kw", "titles"]:

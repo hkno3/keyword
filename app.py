@@ -273,6 +273,85 @@ if start_btn:
             st.warning(f"기사를 다 돌았어요. {len(collected)}개 수집됨.")
         st.rerun()
 
+# ── 2차 검색: 황금 롱테일 키워드 ─────────────────────────
+st.divider()
+st.subheader("🔎 황금 롱테일 키워드 (2차 검색)")
+
+if "longtail_table" not in st.session_state:
+    st.session_state.longtail_table = []
+
+col_lt1, col_lt2 = st.columns([3, 1])
+with col_lt1:
+    direct_lt_input = st.text_input("직접 키워드 입력 (쉼표로 구분)", placeholder="예: 근로장려금, 직장인대출", label_visibility="collapsed")
+with col_lt2:
+    direct_lt_btn = st.button("🔎 롱테일 찾기", use_container_width=True)
+
+auto_lt_btn = st.button("⭐ 황금 키워드로 롱테일 찾기", use_container_width=True,
+                         disabled=len(st.session_state.auto_keywords) == 0)
+
+def _run_longtail(seed_keywords: list):
+    customer_id = os.getenv("NAVER_AD_CUSTOMER_ID", "")
+    ad_key = os.getenv("NAVER_AD_API_KEY", "")
+    ad_secret = os.getenv("NAVER_AD_SECRET_KEY", "")
+    naver_id = os.getenv("NAVER_CLIENT_ID", "")
+    naver_secret = os.getenv("NAVER_CLIENT_SECRET", "")
+
+    with st.spinner("자동완성 수집 중..."):
+        ac_all = []
+        for kw in seed_keywords:
+            ac = naver_api.get_autocomplete(kw)
+            ac_all.extend(ac)
+        ac_all = list(dict.fromkeys(ac_all))
+
+    if not ac_all:
+        st.warning("자동완성 키워드를 찾을 수 없어요.")
+        return
+
+    with st.spinner(f"검색량 조회 중... ({len(ac_all)}개)"):
+        related = naver_api.get_search_volumes_batch(ac_all, customer_id, ad_key, ad_secret)
+
+    with st.spinner(f"문서수 조회 중... ({len(related)}개)"):
+        doc_counts = naver_api.get_doc_counts_parallel(list(related.keys()), naver_id, naver_secret)
+
+    table = naver_api.build_keyword_table(related, doc_counts)
+    st.session_state.longtail_table = table
+
+if auto_lt_btn:
+    seed_kws = [r["keyword"] for r in st.session_state.auto_keywords]
+    _run_longtail(seed_kws)
+
+if direct_lt_btn:
+    if direct_lt_input.strip():
+        seed_kws = [k.strip() for k in direct_lt_input.split(",") if k.strip()]
+        _run_longtail(seed_kws)
+    else:
+        st.warning("키워드를 입력해주세요.")
+
+if st.session_state.longtail_table:
+    lt_df = pd.DataFrame([{
+        "키워드": r["keyword"],
+        "검색": f"https://search.naver.com/search.naver?query={r['keyword']}",
+        "검색_PC": f"{r['pc_search']:,}",
+        "검색_모바일": f"{r['mobile_search']:,}",
+        "월검색(합계)": f"{r['total_search']:,}",
+        "클릭_PC": f"{r['pc_click']:,}",
+        "클릭_모바일": f"{r['mobile_click']:,}",
+        "클릭률_PC": f"{r['pc_ctr']}%",
+        "클릭률_모바일": f"{r['mobile_ctr']}%",
+        "경쟁정도(AD)": r.get("comp_idx", "N/A"),
+        "문서수": f"{r['doc_count']:,}",
+        "경쟁 강도": r["level"],
+        "추천도": r["stars"],
+    } for r in st.session_state.longtail_table])
+    st.caption(f"총 {len(lt_df)}개 롱테일 키워드 | 경쟁 낮은 순 정렬")
+    st.dataframe(lt_df, hide_index=True, use_container_width=True,
+                 column_config={"검색": st.column_config.LinkColumn("검색", display_text="🔍 네이버")})
+    tsv_lt = lt_df.to_csv(sep="\t", index=False).replace("`", "'").replace("\\", "\\\\")
+    components.html(f"""
+<button onclick="navigator.clipboard.writeText(`{tsv_lt}`).then(()=>{{this.textContent='✅ 복사됨!';setTimeout(()=>this.textContent='📋 표 복사 (엑셀 붙여넣기용)',2000)}}).catch(()=>alert('복사 실패'))">📋 표 복사 (엑셀 붙여넣기용)</button>
+<style>button{{padding:8px 20px;background:#ff4b4b;color:white;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-family:sans-serif}}</style>
+""", height=50)
+
 # ── 세션 초기화 ───────────────────────────────────────────
 for key in ["keyword_table", "selected_kw", "titles"]:
     if key not in st.session_state:

@@ -376,10 +376,13 @@ def _find_source_article(kw: str) -> str:
             return text
     return ""
 
-def _generate_and_save_titles(groq_client):
+def _generate_and_save_titles(groq_client, keys: list | None = None):
     history = _load_keywords_history()
     longtail = st.session_state.get("longtail_table", [])
     today = datetime.now().strftime("%Y-%m-%d")
+    key_list = keys or groq_keys
+    key_idx = st.session_state.get("groq_key_idx", 0)
+    client = groq_client
 
     filtered = [r for r in longtail if r.get("mobile_ctr", 0) >= 2]
     to_generate = [r for r in filtered if r["keyword"] not in history]
@@ -405,12 +408,16 @@ def _generate_and_save_titles(groq_client):
     title_status = st.empty()
     title_progress = st.progress(0)
     errors = []
+    all_keys_exhausted = False
 
     for i, row in enumerate(to_generate):
+        if all_keys_exhausted:
+            errors.append(f"{row['keyword']}: 모든 API 키 한도 초과")
+            continue
         kw = row["keyword"]
         title_status.info(f"✍️ 제목 생성 중: {kw} ({i+1}/{len(to_generate)})")
         try:
-            titles, recommended, tokens = claude_service.generate_titles(kw, groq_client)
+            titles, recommended, tokens = claude_service.generate_titles(kw, client)
             _add_groq_tokens(tokens)
             history[kw] = {
                 "first_found": today,
@@ -422,7 +429,32 @@ def _generate_and_save_titles(groq_client):
             }
             _save_keywords_history(history)
         except Exception as e:
-            errors.append(f"{kw}: {e}")
+            err_str = str(e)
+            if "429" in err_str or "rate_limit" in err_str.lower():
+                key_idx += 1
+                if key_idx < len(key_list):
+                    client = Groq(api_key=key_list[key_idx])
+                    st.session_state.groq_key_idx = key_idx
+                    title_status.warning(f"⚠️ Key {key_idx} 한도 초과 → Key {key_idx + 1}로 전환")
+                    try:
+                        titles, recommended, tokens = claude_service.generate_titles(kw, client)
+                        _add_groq_tokens(tokens)
+                        history[kw] = {
+                            "first_found": today,
+                            "source_article": _find_source_article(kw),
+                            "titles": [
+                                {"title": t, "used": False, "recommended": t == recommended}
+                                for t in titles
+                            ],
+                        }
+                        _save_keywords_history(history)
+                    except Exception as e2:
+                        errors.append(f"{kw}: {e2}")
+                else:
+                    all_keys_exhausted = True
+                    errors.append(f"{kw}: 모든 API 키 한도 초과")
+            else:
+                errors.append(f"{kw}: {e}")
         title_progress.progress((i + 1) / len(to_generate))
         time.sleep(0.3)
 
@@ -430,10 +462,15 @@ def _generate_and_save_titles(groq_client):
     title_progress.empty()
 
     generated = len(to_generate) - len(errors)
-    if errors:
+    if all_keys_exhausted:
         st.session_state.title_gen_msg = {
             "type": "warning",
-            "text": f"✅ {generated}개 생성됨 | ⚠️ 실패 {len(errors)}건: {errors[0]}"
+            "text": f"🚫 모든 Groq API 키 한도 초과. {generated}개 생성 후 중단. 내일 다시 시도하세요."
+        }
+    elif errors:
+        st.session_state.title_gen_msg = {
+            "type": "warning",
+            "text": f"✅ {generated}개 키워드 제목 생성됨 | ⚠️ 실패 {len(errors)}건: {errors[0][:80]}"
         }
     else:
         st.session_state.title_gen_msg = {

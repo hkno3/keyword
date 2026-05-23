@@ -16,6 +16,27 @@ load_dotenv()
 
 CRAWLED_FILE = os.path.join(os.path.dirname(__file__), "crawled_links.json")
 KEYWORDS_HISTORY_FILE = os.path.join(os.path.dirname(__file__), "keywords_history.json")
+GROQ_USAGE_FILE = os.path.join(os.path.dirname(__file__), "groq_usage.json")
+
+def _load_groq_usage() -> dict:
+    today = datetime.now().strftime("%Y-%m-%d")
+    try:
+        with open(GROQ_USAGE_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if data.get("date") != today:
+            return {"date": today, "tokens": 0}
+        return data
+    except Exception:
+        return {"date": today, "tokens": 0}
+
+def _save_groq_usage(tokens: int):
+    today = datetime.now().strftime("%Y-%m-%d")
+    with open(GROQ_USAGE_FILE, "w", encoding="utf-8") as f:
+        json.dump({"date": today, "tokens": tokens}, f)
+
+def _add_groq_tokens(n: int):
+    st.session_state.groq_tokens = st.session_state.get("groq_tokens", 0) + n
+    _save_groq_usage(st.session_state.groq_tokens)
 
 def _load_keywords_history() -> dict:
     try:
@@ -96,7 +117,7 @@ with st.sidebar:
         st.session_state.auto_crawled = []
         st.rerun()
     st.divider()
-    st.markdown("**🤖 Groq 사용량 (이번 세션)**")
+    st.markdown(f"**🤖 Groq 사용량 (오늘 {datetime.now().strftime('%m/%d')})**")
     groq_tokens = st.session_state.get("groq_tokens", 0)
     groq_pct = min(groq_tokens / 100000, 1.0)
     st.progress(groq_pct)
@@ -241,7 +262,7 @@ def _generate_and_save_titles(groq_client):
         title_status.info(f"✍️ 제목 생성 중: {kw} ({i+1}/{len(to_generate)})")
         try:
             titles, recommended, tokens = claude_service.generate_titles(kw, groq_client)
-            st.session_state.groq_tokens = st.session_state.get("groq_tokens", 0) + tokens
+            _add_groq_tokens(tokens)
             history[kw] = {
                 "first_found": today,
                 "titles": [
@@ -271,7 +292,9 @@ for key in ["auto_keywords", "auto_crawled", "auto_running"]:
         st.session_state[key] = [] if key != "auto_running" else False
 if "keywords_history" not in st.session_state:
     st.session_state.keywords_history = _load_keywords_history()
-for key in ["groq_tokens", "naver_ad_calls", "naver_search_calls"]:
+if "groq_tokens" not in st.session_state:
+    st.session_state.groq_tokens = _load_groq_usage()["tokens"]
+for key in ["naver_ad_calls", "naver_search_calls"]:
     if key not in st.session_state:
         st.session_state[key] = 0
 
@@ -387,7 +410,7 @@ if start_btn:
             # AI 씨드 추출
             try:
                 seeds, tokens = claude_service.extract_seed_keywords(text, groq_client)
-                st.session_state.groq_tokens += tokens
+                _add_groq_tokens(tokens)
                 st.session_state.groq_key_idx = groq_key_idx
                 seeds = [s for s in seeds if len(s.strip()) >= 2]
             except Exception as e:
@@ -400,7 +423,7 @@ if start_btn:
                         status_box.warning(f"⚠️ Key {groq_key_idx} 한도 초과 → Key {groq_key_idx + 1}로 전환")
                         try:
                             seeds, tokens = claude_service.extract_seed_keywords(text, groq_client)
-                            st.session_state.groq_tokens += tokens
+                            _add_groq_tokens(tokens)
                             seeds = [s for s in seeds if len(s.strip()) >= 2]
                         except Exception:
                             continue
@@ -640,7 +663,7 @@ if st.button("🚀 키워드 분석 시작", type="primary", use_container_width
         if article.strip():
             st.write("📝 씨드 키워드 추출 중...")
             seeds, tokens = claude_service.extract_seed_keywords(article, groq_client)
-            st.session_state.groq_tokens = st.session_state.get("groq_tokens", 0) + tokens
+            _add_groq_tokens(tokens)
         else:
             seeds = []
 
@@ -757,7 +780,7 @@ if st.session_state.keyword_table:
                 groq_client = Groq(api_key=groq_key)
                 with st.spinner("제목 생성 중..."):
                     titles, recommended, tokens = claude_service.generate_titles(selected, groq_client)
-                    st.session_state.groq_tokens = st.session_state.get("groq_tokens", 0) + tokens
+                    _add_groq_tokens(tokens)
                 kw_data = next(r for r in filtered if r["keyword"] == selected)
                 st.session_state.titles = {
                     "keyword": selected,

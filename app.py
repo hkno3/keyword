@@ -189,11 +189,13 @@ def _generate_and_save_titles(groq_client):
     to_generate = [r for r in longtail if r["keyword"] not in history]
 
     if not to_generate:
+        st.info(f"📂 롱테일 키워드 {len(longtail)}개 모두 히스토리에 있어요. 제목 대기열을 확인하세요.")
         st.session_state.keywords_history = history
         return
 
     title_status = st.empty()
     title_progress = st.progress(0)
+    errors = []
 
     for i, row in enumerate(to_generate):
         kw = row["keyword"]
@@ -208,13 +210,17 @@ def _generate_and_save_titles(groq_client):
                 ],
             }
             _save_keywords_history(history)
-        except Exception:
-            pass
+        except Exception as e:
+            errors.append(f"{kw}: {e}")
         title_progress.progress((i + 1) / len(to_generate))
         time.sleep(0.3)
 
     title_status.empty()
     title_progress.empty()
+
+    if errors:
+        st.warning(f"⚠️ 제목 생성 실패 {len(errors)}건:\n" + "\n".join(errors[:3]))
+
     st.session_state.keywords_history = history
 
 # ── 자동 키워드 찾기 ─────────────────────────────────────

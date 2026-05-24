@@ -52,6 +52,25 @@ def save_cache(urls: list[str]):
         json.dump(urls, f, ensure_ascii=False, indent=2)
 
 
+_STOPWORDS = {
+    # 행동/방식
+    "추천", "방법", "비교", "정리", "분석", "총정리", "알아보기", "알아보자",
+    "하는법", "하는방법", "가이드",
+    # 평가/순위
+    "순위", "랭킹", "후기", "리뷰", "솔직", "top", "best", "실패", "성공",
+    # 특성 설명
+    "종류", "효과", "이유", "원인", "특징", "장점", "단점", "차이",
+    "뜻", "의미", "개념", "란", "이란",
+    # 수식어
+    "완벽", "핵심", "쉽게", "빠르게", "제대로", "기초", "입문", "초보",
+    "꼭", "필수",
+    # 숫자/단위
+    "가지", "개", "편", "top3", "top5", "top10",
+    # 기타
+    "정보", "내용", "주의", "팁", "tip", "주의사항", "한눈에",
+}
+
+
 def find_related(keyword: str, urls: list[str], n: int = 6) -> list[str]:
     """키워드와 관련 높은 URL n개 반환 — 엄격(2단어 이상) → 느슨(1단어) 단계적 시도"""
     if not urls:
@@ -59,7 +78,7 @@ def find_related(keyword: str, urls: list[str], n: int = 6) -> list[str]:
 
     kw_words = set()
     for word in re.split(r'\s+', keyword):
-        if len(word) >= 2:
+        if len(word) >= 2 and word.lower() not in _STOPWORDS:
             kw_words.add(word)
 
     if not kw_words:

@@ -788,54 +788,67 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
     else:
         if st.button(f"📝 제목 만들기 ({n_sel}개)", type="primary",
                      use_container_width=True, disabled=n_sel == 0):
-            new_items = []
-            prog = st.progress(0)
-            status_msg = st.empty()
-            groq_client_t = Groq(api_key=groq_keys[st.session_state.get("groq_key_idx", 0)])
-            key_idx_t = st.session_state.get("groq_key_idx", 0)
-            wp_sites_default = _load_wp_sites()
-            default_site = wp_sites_default[0]["name"] if wp_sites_default else ""
+            # 이미 bulk_items에 있는 키워드는 건너뜀
+            existing_kws = {item["keyword"] for item in st.session_state.bulk_items}
+            new_kws = [kw for kw in selected_kws_for_gen if kw not in existing_kws]
+            skip_cnt = len(selected_kws_for_gen) - len(new_kws)
 
-            _naver_id = os.getenv("NAVER_CLIENT_ID", "")
-            _naver_secret = os.getenv("NAVER_CLIENT_SECRET", "")
+            if not new_kws:
+                st.info("선택한 키워드가 이미 발행 준비 목록에 있습니다.")
+            else:
+                prog = st.progress(0)
+                status_msg = st.empty()
+                if skip_cnt:
+                    status_msg.info(f"{skip_cnt}개는 이미 있어서 건너뜁니다.")
+                groq_client_t = Groq(api_key=groq_keys[st.session_state.get("groq_key_idx", 0)])
+                key_idx_t = st.session_state.get("groq_key_idx", 0)
+                wp_sites_default = _load_wp_sites()
+                default_site = wp_sites_default[0]["name"] if wp_sites_default else ""
 
-            for i, kw in enumerate(selected_kws_for_gen):
-                status_msg.info(f"[{i+1}/{n_sel}] {kw} — 네이버 검색 중...")
-                summary = ""
-                if _naver_id and _naver_secret:
-                    try:
-                        summary = naver_api.get_keyword_summary(kw, _naver_id, _naver_secret)
-                    except Exception:
-                        pass
+                _naver_id = os.getenv("NAVER_CLIENT_ID", "")
+                _naver_secret = os.getenv("NAVER_CLIENT_SECRET", "")
+                n_new = len(new_kws)
 
-                status_msg.info(f"[{i+1}/{n_sel}] {kw} — 제목 생성 중...")
-                title = f"{kw} 완벽 정리"
-                try:
-                    title, tokens = claude_service.generate_title_single(kw, groq_client_t, summary=summary)
-                    _add_groq_tokens(tokens)
-                except Exception as e:
-                    err_s = str(e)
-                    if ("429" in err_s or "rate_limit" in err_s.lower()) and key_idx_t + 1 < len(groq_keys):
-                        key_idx_t += 1
-                        groq_client_t = Groq(api_key=groq_keys[key_idx_t])
-                        st.session_state.groq_key_idx = key_idx_t
+                for i, kw in enumerate(new_kws):
+                    status_msg.info(f"[{i+1}/{n_new}] {kw} — 네이버 검색 중...")
+                    summary = ""
+                    if _naver_id and _naver_secret:
                         try:
-                            title, tokens = claude_service.generate_title_single(kw, groq_client_t, summary=summary)
-                            _add_groq_tokens(tokens)
+                            summary = naver_api.get_keyword_summary(kw, _naver_id, _naver_secret)
                         except Exception:
                             pass
-                new_items.append({
-                    "keyword": kw,
-                    "title": title,
-                    "post_data": {},
-                    "site_name": default_site,
-                })
-                prog.progress((i + 1) / n_sel)
 
-            prog.empty()
-            status_msg.empty()
-            st.session_state.bulk_items = new_items
-            st.rerun()
+                    status_msg.info(f"[{i+1}/{n_new}] {kw} — 제목 생성 중...")
+                    title = f"{kw} 완벽 정리"
+                    try:
+                        title, tokens = claude_service.generate_title_single(kw, groq_client_t, summary=summary)
+                        _add_groq_tokens(tokens)
+                    except Exception as e:
+                        err_s = str(e)
+                        if ("429" in err_s or "rate_limit" in err_s.lower()) and key_idx_t + 1 < len(groq_keys):
+                            key_idx_t += 1
+                            groq_client_t = Groq(api_key=groq_keys[key_idx_t])
+                            st.session_state.groq_key_idx = key_idx_t
+                            try:
+                                title, tokens = claude_service.generate_title_single(kw, groq_client_t, summary=summary)
+                                _add_groq_tokens(tokens)
+                            except Exception:
+                                pass
+
+                    new_idx = len(st.session_state.bulk_items)
+                    # 새 인덱스의 stale 위젯 키 초기화
+                    st.session_state.pop(f"bulk_title_{new_idx}", None)
+                    st.session_state.bulk_items.append({
+                        "keyword": kw,
+                        "title": title,
+                        "post_data": {},
+                        "site_name": default_site,
+                    })
+                    prog.progress((i + 1) / n_new)
+
+                prog.empty()
+                status_msg.empty()
+                st.rerun()
 
 # ── 발행 테이블 ───────────────────────────────────────────
 if st.session_state.bulk_items:

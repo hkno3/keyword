@@ -178,7 +178,15 @@ with st.sidebar:
     st.progress(groq_pct)
     st.caption(f"{groq_tokens:,} / 100,000 토큰 ({groq_pct*100:.1f}%)")
     used_key = st.session_state.get("groq_key_idx", 0) + 1
-    st.caption(f"현재 Key {used_key} 사용 중")
+    col_gk, col_gr = st.columns([3, 2])
+    with col_gk:
+        st.caption(f"현재 Key {used_key} 사용 중")
+    with col_gr:
+        if st.button("초기화", key="groq_reset", use_container_width=True):
+            st.session_state.groq_tokens = 0
+            st.session_state.groq_key_idx = 0
+            _save_groq_usage(0)
+            st.rerun()
     st.markdown(f"**✨ Gemini 사용량 (오늘 {datetime.now().strftime('%m/%d')})**")
     gemini_calls = st.session_state.get("gemini_calls", 0)
     gemini_pct = min(gemini_calls / 20, 1.0)

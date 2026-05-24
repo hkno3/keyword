@@ -1102,7 +1102,9 @@ if st.session_state.bulk_items:
 
         if st.session_state.get(f"bulk_prev_{i}") and item.get("post_data"):
             with st.expander(f"👁️ {item['keyword']} 미리보기", expanded=True):
-                st.html(item["post_data"].get("content", ""))
+                _preview_html = item["post_data"].get("content", "")
+                _preview_html = re.sub(r'<a ', '<a target="_blank" rel="noopener" ', _preview_html)
+                st.html(_preview_html)
 
     st.divider()
     col_gen, col_pub, col_reset = st.columns([2, 2, 1])

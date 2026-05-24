@@ -950,8 +950,8 @@ if st.session_state.bulk_items:
             wp_service.publish_post(site_obj, pub_data, pub_status="publish")
 
     # 테이블 헤더
-    hc = st.columns([0.5, 1.5, 2.8, 0.6, 0.8, 0.7, 1.8, 2.2, 1.2])
-    for col, label in zip(hc, ["#", "키워드", "제목", "새제목", "글생성", "미리보기", "사이트", "예약시간", "발행"]):
+    hc = st.columns([0.5, 1.5, 2.8, 0.6, 0.8, 0.7, 0.6, 1.8, 2.2, 1.2])
+    for col, label in zip(hc, ["#", "키워드", "제목", "새제목", "글생성", "미리보기", "🔗", "사이트", "예약시간", "발행"]):
         col.markdown(f"**{label}**")
     st.divider()
 
@@ -959,7 +959,7 @@ if st.session_state.bulk_items:
     _t_naver_secret = os.getenv("NAVER_CLIENT_SECRET", "")
 
     for i, item in enumerate(_bulk_items):
-        cols = st.columns([0.5, 1.5, 2.8, 0.6, 0.8, 0.7, 1.8, 2.2, 1.2])
+        cols = st.columns([0.5, 1.5, 2.8, 0.6, 0.8, 0.7, 0.6, 1.8, 2.2, 1.2])
         with cols[0]:
             st.caption(str(i + 1))
         with cols[1]:
@@ -1018,13 +1018,17 @@ if st.session_state.bulk_items:
                 st.session_state[f"bulk_prev_{i}"] = not st.session_state.get(f"bulk_prev_{i}", False)
                 st.rerun()
         with cols[6]:
+            if st.button("🔗", key=f"bulk_links_btn_{i}", help="내부링크 / 함께보면 좋은 글 확인"):
+                st.session_state[f"bulk_links_{i}"] = not st.session_state.get(f"bulk_links_{i}", False)
+                st.rerun()
+        with cols[7]:
             cur_site = st.selectbox("", site_names,
                                     index=site_names.index(item["site_name"]) if item["site_name"] in site_names else 0,
                                     key=f"bulk_site_{i}", label_visibility="collapsed")
-        with cols[7]:
+        with cols[8]:
             cur_sched = st.text_input("", placeholder="2026-05-24 09:00",
                                       key=f"bulk_sched_input_{i}", label_visibility="collapsed")
-        with cols[8]:
+        with cols[9]:
             has_post_pub = bool(item.get("post_data"))
             if st.button("발행", key=f"bulk_pub_{i}", use_container_width=True,
                          disabled=not has_post_pub, help="글 생성 후 발행 가능"):
@@ -1038,6 +1042,28 @@ if st.session_state.bulk_items:
                         st.success("✅ 완료")
                     except Exception as e:
                         st.error(f"❌ {e}")
+
+        if st.session_state.get(f"bulk_links_{i}"):
+            _cached_u = sitemap_service.load_cache()
+            _rel_u = sitemap_service.find_related(item["keyword"], _cached_u, n=6)
+            _internal = _rel_u[:3]
+            _related = _rel_u[3:6]
+            with st.container(border=True):
+                lc1, lc2 = st.columns(2)
+                with lc1:
+                    st.caption("**📎 내부링크**")
+                    if _internal:
+                        for u in _internal:
+                            st.caption(u)
+                    else:
+                        st.caption("없음")
+                with lc2:
+                    st.caption("**📖 함께보면 좋은 글**")
+                    if _related:
+                        for u in _related:
+                            st.caption(u)
+                    else:
+                        st.caption("없음")
 
         if st.session_state.get(f"bulk_prev_{i}") and item.get("post_data"):
             with st.expander(f"👁️ {item['keyword']} 미리보기", expanded=True):

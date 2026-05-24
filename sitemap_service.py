@@ -53,24 +53,34 @@ def save_cache(urls: list[str]):
 
 
 def find_related(keyword: str, urls: list[str], n: int = 6) -> list[str]:
-    """키워드와 관련 높은 URL n개 반환 (슬러그 매칭)"""
+    """키워드와 관련 높은 URL n개 반환 — 엄격(2단어 이상) → 느슨(1단어) 단계적 시도"""
     if not urls:
         return []
 
-    # 키워드에서 2자 이상 단어 추출
     kw_words = set()
     for word in re.split(r'\s+', keyword):
         if len(word) >= 2:
             kw_words.add(word)
-        if len(word) >= 4:
-            kw_words.add(word[:2])
 
-    scored = []
-    for url in urls:
+    if not kw_words:
+        return []
+
+    def _score(url, words):
         slug = urllib.parse.unquote(url)
-        score = sum(1 for w in kw_words if w in slug)
-        if score > 0:
-            scored.append((score, url))
+        return sum(1 for w in words if w in slug)
 
+    # 1단계: 2개 이상 단어 매칭 (엄격)
+    scored = [(s, u) for u in urls if (s := _score(u, kw_words)) >= 2]
     scored.sort(key=lambda x: -x[0])
-    return [url for _, url in scored[:n]]
+    result = [u for _, u in scored[:n]]
+
+    if len(result) >= n:
+        return result
+
+    # 2단계: 1개 이상 단어 매칭으로 부족분 보완
+    existing = set(result)
+    scored2 = [(s, u) for u in urls if u not in existing and (s := _score(u, kw_words)) >= 1]
+    scored2.sort(key=lambda x: -x[0])
+    result += [u for _, u in scored2[:n - len(result)]]
+
+    return result

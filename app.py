@@ -796,11 +796,22 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
             wp_sites_default = _load_wp_sites()
             default_site = wp_sites_default[0]["name"] if wp_sites_default else ""
 
+            _naver_id = os.getenv("NAVER_CLIENT_ID", "")
+            _naver_secret = os.getenv("NAVER_CLIENT_SECRET", "")
+
             for i, kw in enumerate(selected_kws_for_gen):
+                status_msg.info(f"[{i+1}/{n_sel}] {kw} — 네이버 검색 중...")
+                summary = ""
+                if _naver_id and _naver_secret:
+                    try:
+                        summary = naver_api.get_keyword_summary(kw, _naver_id, _naver_secret)
+                    except Exception:
+                        pass
+
                 status_msg.info(f"[{i+1}/{n_sel}] {kw} — 제목 생성 중...")
                 title = f"{kw} 완벽 정리"
                 try:
-                    title, tokens = claude_service.generate_title_single(kw, groq_client_t)
+                    title, tokens = claude_service.generate_title_single(kw, groq_client_t, summary=summary)
                     _add_groq_tokens(tokens)
                 except Exception as e:
                     err_s = str(e)
@@ -809,7 +820,7 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
                         groq_client_t = Groq(api_key=groq_keys[key_idx_t])
                         st.session_state.groq_key_idx = key_idx_t
                         try:
-                            title, tokens = claude_service.generate_title_single(kw, groq_client_t)
+                            title, tokens = claude_service.generate_title_single(kw, groq_client_t, summary=summary)
                             _add_groq_tokens(tokens)
                         except Exception:
                             pass

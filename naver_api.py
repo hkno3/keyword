@@ -276,7 +276,16 @@ def search_blog(keyword: str, client_id: str, client_secret: str, display: int =
     return [item["link"] for item in items if item.get("link")]
 
 
-def search_web(keyword: str, client_id: str, client_secret: str, display: int = 5) -> list[str]:
-    """네이버 웹 검색 → URL 목록 반환"""
-    items = _naver_search(keyword, "webkr", client_id, client_secret, display)
-    return [item["link"] for item in items if item.get("link")]
+def get_keyword_summary(keyword: str, client_id: str, client_secret: str) -> str:
+    """키워드로 웹/블로그 검색해 상위 스니펫 요약 반환 (제목 생성 컨텍스트용)"""
+    snippets = []
+    for search_type in ("webkr", "blog"):
+        items = _naver_search(keyword, search_type, client_id, client_secret, display=3)
+        for item in items:
+            title = re.sub(r"<[^>]+>", "", item.get("title", "")).strip()
+            desc = re.sub(r"<[^>]+>", "", item.get("description", "")).strip()
+            if title:
+                snippets.append(title)
+            if desc:
+                snippets.append(desc)
+    return " / ".join(snippets[:8]) if snippets else ""

@@ -937,7 +937,9 @@ if st.session_state.bulk_items:
                             gc = Groq(api_key=groq_keys[st.session_state.get("groq_key_idx", 0)])
                             new_title, tokens = claude_service.generate_title_single(kw_t, gc, summary=smry)
                             _add_groq_tokens(tokens)
-                            st.session_state.bulk_items[i]["title"] = new_title
+                            updated = list(st.session_state.bulk_items)
+                            updated[i] = {**updated[i], "title": new_title}
+                            st.session_state.bulk_items = updated
                             st.session_state.pop(f"bulk_title_{i}", None)
                             st.rerun()
                         except Exception as e:

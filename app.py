@@ -895,13 +895,16 @@ if st.session_state.bulk_items:
             wp_service.publish_post(site_obj, pub_data, pub_status="publish")
 
     # 테이블 헤더
-    hc = st.columns([0.5, 1.5, 3.2, 0.8, 0.7, 1.8, 2.2, 1.2])
-    for col, label in zip(hc, ["#", "키워드", "제목", "글생성", "미리보기", "사이트", "예약시간", "발행"]):
+    hc = st.columns([0.5, 1.5, 2.8, 0.6, 0.8, 0.7, 1.8, 2.2, 1.2])
+    for col, label in zip(hc, ["#", "키워드", "제목", "새제목", "글생성", "미리보기", "사이트", "예약시간", "발행"]):
         col.markdown(f"**{label}**")
     st.divider()
 
+    _t_naver_id = os.getenv("NAVER_CLIENT_ID", "")
+    _t_naver_secret = os.getenv("NAVER_CLIENT_SECRET", "")
+
     for i, item in enumerate(_bulk_items):
-        cols = st.columns([0.5, 1.5, 3.2, 0.8, 0.7, 1.8, 2.2, 1.2])
+        cols = st.columns([0.5, 1.5, 2.8, 0.6, 0.8, 0.7, 1.8, 2.2, 1.2])
         with cols[0]:
             st.caption(str(i + 1))
         with cols[1]:
@@ -910,6 +913,23 @@ if st.session_state.bulk_items:
             cur_title = st.text_input("", value=item["title"],
                                       key=f"bulk_title_{i}", label_visibility="collapsed")
         with cols[3]:
+            if st.button("🔄", key=f"bulk_retitle_{i}", use_container_width=True, help="제목 새로 만들기"):
+                if not groq_keys:
+                    st.error("Groq 키 필요")
+                else:
+                    with st.spinner(""):
+                        try:
+                            kw_t = item["keyword"]
+                            smry = naver_api.get_keyword_summary(kw_t, _t_naver_id, _t_naver_secret) if _t_naver_id else ""
+                            gc = Groq(api_key=groq_keys[st.session_state.get("groq_key_idx", 0)])
+                            new_title, tokens = claude_service.generate_title_single(kw_t, gc, summary=smry)
+                            _add_groq_tokens(tokens)
+                            st.session_state.bulk_items[i]["title"] = new_title
+                            st.session_state[f"bulk_title_{i}"] = new_title
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ {e}")
+        with cols[4]:
             has_post = bool(item.get("post_data"))
             if st.button("✍️" if not has_post else "↺", key=f"bulk_gen_{i}",
                          use_container_width=True, help="Gemini로 글 생성"):
@@ -923,19 +943,19 @@ if st.session_state.bulk_items:
                         st.rerun()
                     except Exception as e:
                         st.error(f"❌ {e}")
-        with cols[4]:
+        with cols[5]:
             has_post = bool(item.get("post_data"))
             if st.button("👁️", key=f"bulk_prev_btn_{i}", disabled=not has_post):
                 st.session_state[f"bulk_prev_{i}"] = not st.session_state.get(f"bulk_prev_{i}", False)
                 st.rerun()
-        with cols[5]:
+        with cols[6]:
             cur_site = st.selectbox("", site_names,
                                     index=site_names.index(item["site_name"]) if item["site_name"] in site_names else 0,
                                     key=f"bulk_site_{i}", label_visibility="collapsed")
-        with cols[6]:
+        with cols[7]:
             cur_sched = st.text_input("", placeholder="2026-05-24 09:00",
                                       key=f"bulk_sched_input_{i}", label_visibility="collapsed")
-        with cols[7]:
+        with cols[8]:
             has_post_pub = bool(item.get("post_data"))
             if st.button("발행", key=f"bulk_pub_{i}", use_container_width=True,
                          disabled=not has_post_pub, help="글 생성 후 발행 가능"):

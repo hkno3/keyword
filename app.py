@@ -460,6 +460,8 @@ for key in ["naver_ad_calls", "naver_search_calls"]:
         st.session_state[key] = 0
 if "bulk_items" not in st.session_state:
     st.session_state.bulk_items = []
+if "bulk_title_versions" not in st.session_state:
+    st.session_state.bulk_title_versions = {}
 
 crawled_file_links = _load_crawled_links()
 groq_keys = [k for k in [groq_key, groq_key2] if k.strip()]
@@ -855,8 +857,7 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
                                 pass
 
                     new_idx = len(st.session_state.bulk_items)
-                    # 새 인덱스의 stale 위젯 키 초기화
-                    st.session_state.pop(f"bulk_title_{new_idx}", None)
+                    st.session_state.bulk_title_versions[new_idx] = 0
                     st.session_state.bulk_items.append({
                         "keyword": kw,
                         "title": title,
@@ -942,8 +943,9 @@ if st.session_state.bulk_items:
         with cols[1]:
             st.caption(item["keyword"])
         with cols[2]:
+            _ver = st.session_state.bulk_title_versions.get(i, 0)
             cur_title = st.text_input("", value=item["title"],
-                                      key=f"bulk_title_{i}", label_visibility="collapsed")
+                                      key=f"bulk_title_{i}_v{_ver}", label_visibility="collapsed")
         with cols[3]:
             if st.button("🔄", key=f"bulk_retitle_{i}", use_container_width=True, help="제목 새로 만들기"):
                 if not groq_keys:
@@ -959,7 +961,7 @@ if st.session_state.bulk_items:
                             updated = list(st.session_state.bulk_items)
                             updated[i] = {**updated[i], "title": new_title}
                             st.session_state.bulk_items = updated
-                            st.session_state.pop(f"bulk_title_{i}", None)
+                            st.session_state.bulk_title_versions[i] = _ver + 1
                             st.rerun()
                         except Exception as e:
                             st.error(f"❌ {e}")
@@ -971,7 +973,7 @@ if st.session_state.bulk_items:
                     st.error("Gemini 키 필요")
                 else:
                     try:
-                        gen_title = st.session_state.get(f"bulk_title_{i}", item["title"])
+                        gen_title = cur_title
                         pd = _do_generate_post(item, gen_title)
                         st.session_state.bulk_items[i]["post_data"] = pd
                         st.rerun()
@@ -1013,6 +1015,7 @@ if st.session_state.bulk_items:
     with col_reset:
         if st.button("🗑️ 초기화", use_container_width=True):
             st.session_state.bulk_items = []
+            st.session_state.bulk_title_versions = {}
             st.rerun()
     with col_bulk:
         if not gemini_key1:
@@ -1024,7 +1027,8 @@ if st.session_state.bulk_items:
             n_b = len(_bulk_items)
             for i, item in enumerate(_bulk_items):
                 kw_b = item["keyword"]
-                title_b = st.session_state.get(f"bulk_title_{i}", item["title"])
+                _ver_b = st.session_state.bulk_title_versions.get(i, 0)
+                title_b = st.session_state.get(f"bulk_title_{i}_v{_ver_b}", item["title"])
                 site_b = st.session_state.get(f"bulk_site_{i}", item["site_name"])
                 sched_b = st.session_state.get(f"bulk_sched_input_{i}", "").strip()
                 site_obj_b = next((s for s in wp_sites_pub if s["name"] == site_b), None)

@@ -856,7 +856,7 @@ if st.session_state.bulk_items:
         with col_sh:
             bulk_start_hour = st.number_input("시", 0, 23, value=_now2.hour, key="bulk_start_hour")
         with col_sm:
-            bulk_start_min = st.number_input("분", 0, 59, value=0, step=10, key="bulk_start_min")
+            bulk_start_min = st.number_input("분", 0, 59, value=_now2.minute, step=10, key="bulk_start_min")
         with col_intv:
             bulk_interval = st.number_input("간격(시간)", min_value=1, value=1, key="bulk_interval")
         with col_calc:

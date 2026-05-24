@@ -723,27 +723,38 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
 }
 </style>""", unsafe_allow_html=True)
     with st.container(height=300):
-        for kw in _hist_kws:
-            col_chk, col_kw, col_del = st.columns([1, 8, 1])
-            is_pub = _hist[kw].get("published", False)
-            with col_chk:
-                st.checkbox("", key=f"hist_chk_{kw}", label_visibility="collapsed")
-            with col_kw:
-                date_str = _hist[kw].get("first_found", "")
-                if is_pub:
-                    st.markdown(
-                        f'<p style="color:#999;margin:0;font-size:0.82em;">'
-                        f'✅ {kw} <span style="font-size:0.85em;">{date_str}</span>'
-                        f' <span style="color:#4caf50;">발행됨</span></p>',
-                        unsafe_allow_html=True,
-                    )
-                else:
-                    st.caption(f"**{kw}** {date_str}")
-            with col_del:
-                if st.button("✕", key=f"hist_del_{kw}"):
-                    del _hist[kw]
-                    _save_keywords_history(_hist)
-                    st.rerun()
+        for row_start in range(0, len(_hist_kws), 3):
+            row_kws = _hist_kws[row_start:row_start + 3]
+            # 3칸 고정 (빈 칸 포함)
+            grid = st.columns(3)
+            for j in range(3):
+                with grid[j]:
+                    if j >= len(row_kws):
+                        break
+                    kw = row_kws[j]
+                    is_pub = _hist[kw].get("published", False)
+                    c_chk, c_kw, c_del = st.columns([1, 7, 1])
+                    with c_chk:
+                        st.checkbox("", key=f"hist_chk_{kw}", label_visibility="collapsed")
+                    with c_kw:
+                        date_str = _hist[kw].get("first_found", "")
+                        if is_pub:
+                            st.markdown(
+                                f'<p style="color:#999;margin:0;font-size:0.78em;">'
+                                f'✅ {kw}<br><span style="color:#4caf50;">발행됨</span></p>',
+                                unsafe_allow_html=True,
+                            )
+                        else:
+                            st.markdown(
+                                f'<p style="margin:0;font-size:0.82em;"><b>{kw}</b><br>'
+                                f'<span style="color:#888;font-size:0.85em;">{date_str}</span></p>',
+                                unsafe_allow_html=True,
+                            )
+                    with c_del:
+                        if st.button("✕", key=f"hist_del_{kw}"):
+                            del _hist[kw]
+                            _save_keywords_history(_hist)
+                            st.rerun()
 
     selected_kws_for_gen = [kw for kw in _hist_kws if st.session_state.get(f"hist_chk_{kw}")]
     n_sel = len(selected_kws_for_gen)

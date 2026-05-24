@@ -733,7 +733,7 @@ st.divider()
 st.subheader("📋 키워드 히스토리")
 
 _hist = _load_keywords_history()
-_hist_kws = sorted(_hist.keys())
+_hist_kws = sorted([kw for kw, v in _hist.items() if not v.get("excluded", False)])
 
 if not _hist_kws:
     st.caption("키워드 히스토리가 없습니다. 위에서 황금 롱테일 키워드를 찾아주세요.")
@@ -797,9 +797,31 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
                             )
                     with c_del:
                         if st.button("✕", key=f"hist_del_{kw}"):
-                            del _hist[kw]
+                            today = datetime.now().strftime("%Y-%m-%d")
+                            _hist[kw]["excluded"] = True
+                            _hist[kw]["excluded_at"] = today
+                            _hist[kw]["exclude_reason"] = "published" if _hist[kw].get("published") else "deleted"
                             _save_keywords_history(_hist)
                             st.rerun()
+
+    _excluded_kws = sorted([kw for kw, v in _hist.items() if v.get("excluded", False)])
+    if _excluded_kws:
+        with st.expander(f"🚫 제외 목록 ({len(_excluded_kws)}개)"):
+            for exc_kw in _excluded_kws:
+                exc_data = _hist[exc_kw]
+                reason = "✅ 발행됨" if exc_data.get("published") else "삭제"
+                ec1, ec2, ec3 = st.columns([5, 2, 1])
+                with ec1:
+                    st.caption(exc_kw)
+                with ec2:
+                    st.caption(reason)
+                with ec3:
+                    if st.button("↩", key=f"exc_restore_{exc_kw}", help="히스토리로 복원"):
+                        _hist[exc_kw].pop("excluded", None)
+                        _hist[exc_kw].pop("excluded_at", None)
+                        _hist[exc_kw].pop("exclude_reason", None)
+                        _save_keywords_history(_hist)
+                        st.rerun()
 
     selected_kws_for_gen = [kw for kw in _hist_kws if st.session_state.get(f"hist_chk_{kw}")]
     n_sel = len(selected_kws_for_gen)

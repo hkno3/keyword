@@ -826,71 +826,29 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
     selected_kws_for_gen = [kw for kw in _hist_kws if st.session_state.get(f"hist_chk_{kw}")]
     n_sel = len(selected_kws_for_gen)
 
-    if not groq_keys:
-        st.warning("⚠️ 사이드바에서 Groq API 키를 입력해주세요.")
-    else:
-        if st.button(f"📝 제목 만들기 ({n_sel}개)", type="primary",
-                     use_container_width=True, disabled=n_sel == 0):
-            # 이미 bulk_items에 있는 키워드는 건너뜀
-            existing_kws = {item["keyword"] for item in st.session_state.bulk_items}
-            new_kws = [kw for kw in selected_kws_for_gen if kw not in existing_kws]
-            skip_cnt = len(selected_kws_for_gen) - len(new_kws)
+    if st.button(f"📝 제목 만들기 ({n_sel}개)", type="primary",
+                 use_container_width=True, disabled=n_sel == 0):
+        existing_kws = {item["keyword"] for item in st.session_state.bulk_items}
+        new_kws = [kw for kw in selected_kws_for_gen if kw not in existing_kws]
+        skip_cnt = len(selected_kws_for_gen) - len(new_kws)
 
-            if not new_kws:
-                st.info("선택한 키워드가 이미 발행 준비 목록에 있습니다.")
-            else:
-                prog = st.progress(0)
-                status_msg = st.empty()
-                if skip_cnt:
-                    status_msg.info(f"{skip_cnt}개는 이미 있어서 건너뜁니다.")
-                groq_client_t = Groq(api_key=groq_keys[st.session_state.get("groq_key_idx", 0)])
-                key_idx_t = st.session_state.get("groq_key_idx", 0)
-                wp_sites_default = _load_wp_sites()
-                default_site = wp_sites_default[0]["name"] if wp_sites_default else ""
-
-                _naver_id = os.getenv("NAVER_CLIENT_ID", "")
-                _naver_secret = os.getenv("NAVER_CLIENT_SECRET", "")
-                n_new = len(new_kws)
-
-                for i, kw in enumerate(new_kws):
-                    status_msg.info(f"[{i+1}/{n_new}] {kw} — 네이버 검색 중...")
-                    summary = ""
-                    if _naver_id and _naver_secret:
-                        try:
-                            summary = naver_api.get_keyword_summary(kw, _naver_id, _naver_secret)
-                        except Exception:
-                            pass
-
-                    status_msg.info(f"[{i+1}/{n_new}] {kw} — 제목 생성 중...")
-                    title = f"{kw} 완벽 정리"
-                    try:
-                        title, tokens = claude_service.generate_title_single(kw, groq_client_t, summary=summary)
-                        _add_groq_tokens(tokens)
-                    except Exception as e:
-                        err_s = str(e)
-                        if ("429" in err_s or "rate_limit" in err_s.lower()) and key_idx_t + 1 < len(groq_keys):
-                            key_idx_t += 1
-                            groq_client_t = Groq(api_key=groq_keys[key_idx_t])
-                            st.session_state.groq_key_idx = key_idx_t
-                            try:
-                                title, tokens = claude_service.generate_title_single(kw, groq_client_t, summary=summary)
-                                _add_groq_tokens(tokens)
-                            except Exception:
-                                pass
-
-                    new_idx = len(st.session_state.bulk_items)
-                    st.session_state.bulk_title_versions[new_idx] = 0
-                    st.session_state.bulk_items.append({
-                        "keyword": kw,
-                        "title": title,
-                        "post_data": {},
-                        "site_name": default_site,
-                    })
-                    prog.progress((i + 1) / n_new)
-
-                prog.empty()
-                status_msg.empty()
-                st.rerun()
+        if not new_kws:
+            st.info("선택한 키워드가 이미 발행 준비 목록에 있습니다.")
+        else:
+            wp_sites_default = _load_wp_sites()
+            default_site = wp_sites_default[0]["name"] if wp_sites_default else ""
+            for kw in new_kws:
+                new_idx = len(st.session_state.bulk_items)
+                st.session_state.bulk_title_versions[new_idx] = 0
+                st.session_state.bulk_items.append({
+                    "keyword": kw,
+                    "title": "",
+                    "post_data": {},
+                    "site_name": default_site,
+                })
+            if skip_cnt:
+                st.info(f"{skip_cnt}개는 이미 있어서 건너뜁니다.")
+            st.rerun()
 
 # ── 발행 테이블 ───────────────────────────────────────────
 if st.session_state.bulk_items:
@@ -1004,8 +962,11 @@ if st.session_state.bulk_items:
                             st.error(f"❌ {e}")
         with cols[4]:
             has_post = bool(item.get("post_data"))
+            _title_empty = not cur_title.strip()
             if st.button("✍️" if not has_post else "↺", key=f"bulk_gen_{i}",
-                         use_container_width=True, help="Gemini로 글 생성"):
+                         use_container_width=True,
+                         disabled=_title_empty,
+                         help="제목을 먼저 입력해주세요" if _title_empty else "Gemini로 글 생성"):
                 if not gemini_key1:
                     st.error("Gemini 키 필요")
                 else:

@@ -195,7 +195,7 @@ with st.sidebar:
     st.download_button(
         "💾 히스토리 저장",
         data=json.dumps(history, ensure_ascii=False, indent=2),
-        file_name="keywords_history.json",
+        file_name=f"keywords_history_{datetime.now().strftime('%Y%m%d_%H%M')}.json",
         mime="application/json",
         use_container_width=True,
     )

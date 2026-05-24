@@ -69,7 +69,21 @@ def generate_title_single(keyword: str, client: Groq, summary: str = "") -> tupl
     )
     tokens = response.usage.total_tokens if response.usage else 0
     title = response.choices[0].message.content.strip().strip('"\'')
-    if _has_japanese(title) or not title:
+
+    def _valid(t: str) -> bool:
+        return bool(t) and not _has_japanese(t) and keyword[:4] in t[:20]
+
+    if not _valid(title):
+        # 키워드가 제목 앞에 없으면 1회 재시도 (summary 없이)
+        r2 = client.chat.completions.create(
+            model=MODEL, max_tokens=200,
+            messages=[{"role": "user", "content":
+                f'키워드 "{keyword}"로 시작하는 한국어 블로그 제목 1개만 반환 (24~30자, 숫자 포함, 따옴표 없이):'}],
+        )
+        tokens += r2.usage.total_tokens if r2.usage else 0
+        title = r2.choices[0].message.content.strip().strip('"\'')
+
+    if not _valid(title):
         title = f"{keyword} 완벽 정리 3가지 핵심 방법"
     return title, tokens
 

@@ -192,6 +192,30 @@ with st.sidebar:
     st.divider()
     history = _load_keywords_history()
     st.caption(f"키워드 히스토리: {len(history)}개 키워드")
+    st.download_button(
+        "💾 히스토리 저장",
+        data=json.dumps(history, ensure_ascii=False, indent=2),
+        file_name="keywords_history.json",
+        mime="application/json",
+        use_container_width=True,
+    )
+    uploaded = st.file_uploader("📂 히스토리 불러오기", type="json", key="hist_upload",
+                                label_visibility="collapsed")
+    if uploaded:
+        try:
+            imported = json.load(uploaded)
+            merged = _load_keywords_history()
+            added = 0
+            for kw, val in imported.items():
+                if kw not in merged:
+                    merged[kw] = val
+                    added += 1
+            _save_keywords_history(merged)
+            st.session_state.keywords_history = merged
+            st.success(f"✅ {added}개 키워드 불러옴")
+            st.rerun()
+        except Exception as e:
+            st.error(f"❌ {e}")
     if st.button("🗑️ 키워드 히스토리 초기화"):
         if os.path.exists(KEYWORDS_HISTORY_FILE):
             os.remove(KEYWORDS_HISTORY_FILE)

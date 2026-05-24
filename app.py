@@ -925,7 +925,7 @@ if st.session_state.bulk_items:
                             new_title, tokens = claude_service.generate_title_single(kw_t, gc, summary=smry)
                             _add_groq_tokens(tokens)
                             st.session_state.bulk_items[i]["title"] = new_title
-                            st.session_state[f"bulk_title_{i}"] = new_title
+                            st.session_state.pop(f"bulk_title_{i}", None)
                             st.rerun()
                         except Exception as e:
                             st.error(f"❌ {e}")

@@ -94,6 +94,12 @@ def _save_keywords_history(history: dict):
     with open(KEYWORDS_HISTORY_FILE, "w", encoding="utf-8") as f:
         json.dump(history, f, ensure_ascii=False, indent=2)
 
+def _mark_keyword_published(kw: str):
+    history = _load_keywords_history()
+    if kw in history:
+        history[kw]["published"] = True
+        _save_keywords_history(history)
+
 def _save_keywords_to_history(keywords: list):
     history = _load_keywords_history()
     today = datetime.now().strftime("%Y-%m-%d")
@@ -719,11 +725,20 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
     with st.container(height=300):
         for kw in _hist_kws:
             col_chk, col_kw, col_del = st.columns([1, 8, 1])
+            is_pub = _hist[kw].get("published", False)
             with col_chk:
                 st.checkbox("", key=f"hist_chk_{kw}", label_visibility="collapsed")
             with col_kw:
                 date_str = _hist[kw].get("first_found", "")
-                st.caption(f"**{kw}** {date_str}")
+                if is_pub:
+                    st.markdown(
+                        f'<p style="color:#999;margin:0;font-size:0.82em;">'
+                        f'✅ {kw} <span style="font-size:0.85em;">{date_str}</span>'
+                        f' <span style="color:#4caf50;">발행됨</span></p>',
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.caption(f"**{kw}** {date_str}")
             with col_del:
                 if st.button("✕", key=f"hist_del_{kw}"):
                     del _hist[kw]
@@ -872,6 +887,7 @@ if st.session_state.bulk_items:
                         post_data = item.get("post_data") or _do_generate_post(item, cur_title)
                         st.session_state.bulk_items[i]["post_data"] = post_data
                         _do_publish(site_obj, post_data, cur_title, cur_sched.strip())
+                        _mark_keyword_published(item["keyword"])
                         st.success("✅ 완료")
                     except Exception as e:
                         st.error(f"❌ {e}")
@@ -910,6 +926,7 @@ if st.session_state.bulk_items:
                     st.session_state.bulk_items[i]["post_data"] = post_data_b
                     status_b.info(f"[{i+1}/{n_b}] {kw_b} — 발행 중...")
                     _do_publish(site_obj_b, post_data_b, title_b, sched_b)
+                    _mark_keyword_published(kw_b)
                     success_cnt += 1
                 except Exception:
                     fail_cnt += 1

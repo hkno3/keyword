@@ -825,12 +825,6 @@ if st.session_state.bulk_items:
                     st.session_state[f"bulk_sched_input_{i}"] = dt.strftime("%Y-%m-%d %H:%M")
                 st.rerun()
 
-    # 테이블 헤더
-    hc = st.columns([0.5, 1.5, 3.5, 0.7, 1.8, 2.2, 1.2])
-    for col, label in zip(hc, ["#", "키워드", "제목", "미리보기", "사이트", "예약시간", "발행"]):
-        col.markdown(f"**{label}**")
-    st.divider()
-
     def _do_generate_post(item: dict, edited_title: str) -> dict:
         kw = item["keyword"]
         cached_u = sitemap_service.load_cache()
@@ -854,8 +848,14 @@ if st.session_state.bulk_items:
         else:
             wp_service.publish_post(site_obj, pub_data, pub_status="publish")
 
+    # 테이블 헤더
+    hc = st.columns([0.5, 1.5, 3.2, 0.8, 0.7, 1.8, 2.2, 1.2])
+    for col, label in zip(hc, ["#", "키워드", "제목", "글생성", "미리보기", "사이트", "예약시간", "발행"]):
+        col.markdown(f"**{label}**")
+    st.divider()
+
     for i, item in enumerate(_bulk_items):
-        cols = st.columns([0.5, 1.5, 3.5, 0.7, 1.8, 2.2, 1.2])
+        cols = st.columns([0.5, 1.5, 3.2, 0.8, 0.7, 1.8, 2.2, 1.2])
         with cols[0]:
             st.caption(str(i + 1))
         with cols[1]:
@@ -865,28 +865,40 @@ if st.session_state.bulk_items:
                                       key=f"bulk_title_{i}", label_visibility="collapsed")
         with cols[3]:
             has_post = bool(item.get("post_data"))
-            if st.button("👁️", key=f"bulk_prev_btn_{i}", disabled=not has_post):
-                st.session_state[f"bulk_prev_{i}"] = not st.session_state.get(f"bulk_prev_{i}", False)
-                st.rerun()
-        with cols[4]:
-            cur_site = st.selectbox("", site_names,
-                                    index=site_names.index(item["site_name"]) if item["site_name"] in site_names else 0,
-                                    key=f"bulk_site_{i}", label_visibility="collapsed")
-        with cols[5]:
-            cur_sched = st.text_input("", placeholder="2026-05-24 09:00",
-                                      key=f"bulk_sched_input_{i}", label_visibility="collapsed")
-        with cols[6]:
-            if st.button("발행", key=f"bulk_pub_{i}", use_container_width=True):
-                site_obj = next((s for s in wp_sites_pub if s["name"] == cur_site), None)
-                if not site_obj:
-                    st.error("사이트 없음")
-                elif not gemini_key1:
+            if st.button("✍️" if not has_post else "↺", key=f"bulk_gen_{i}",
+                         use_container_width=True, help="Gemini로 글 생성"):
+                if not gemini_key1:
                     st.error("Gemini 키 필요")
                 else:
                     try:
-                        post_data = item.get("post_data") or _do_generate_post(item, cur_title)
-                        st.session_state.bulk_items[i]["post_data"] = post_data
-                        _do_publish(site_obj, post_data, cur_title, cur_sched.strip())
+                        gen_title = st.session_state.get(f"bulk_title_{i}", item["title"])
+                        pd = _do_generate_post(item, gen_title)
+                        st.session_state.bulk_items[i]["post_data"] = pd
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ {e}")
+        with cols[4]:
+            has_post = bool(item.get("post_data"))
+            if st.button("👁️", key=f"bulk_prev_btn_{i}", disabled=not has_post):
+                st.session_state[f"bulk_prev_{i}"] = not st.session_state.get(f"bulk_prev_{i}", False)
+                st.rerun()
+        with cols[5]:
+            cur_site = st.selectbox("", site_names,
+                                    index=site_names.index(item["site_name"]) if item["site_name"] in site_names else 0,
+                                    key=f"bulk_site_{i}", label_visibility="collapsed")
+        with cols[6]:
+            cur_sched = st.text_input("", placeholder="2026-05-24 09:00",
+                                      key=f"bulk_sched_input_{i}", label_visibility="collapsed")
+        with cols[7]:
+            has_post_pub = bool(item.get("post_data"))
+            if st.button("발행", key=f"bulk_pub_{i}", use_container_width=True,
+                         disabled=not has_post_pub, help="글 생성 후 발행 가능"):
+                site_obj = next((s for s in wp_sites_pub if s["name"] == cur_site), None)
+                if not site_obj:
+                    st.error("사이트 없음")
+                else:
+                    try:
+                        _do_publish(site_obj, item["post_data"], cur_title, cur_sched.strip())
                         _mark_keyword_published(item["keyword"])
                         st.success("✅ 완료")
                     except Exception as e:

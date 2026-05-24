@@ -955,8 +955,19 @@ if st.session_state.bulk_items:
                         try:
                             kw_t = item["keyword"]
                             smry = naver_api.get_keyword_summary(kw_t, _t_naver_id, _t_naver_secret) if _t_naver_id else ""
-                            gc = Groq(api_key=groq_keys[st.session_state.get("groq_key_idx", 0)])
-                            new_title, tokens = claude_service.generate_title_single(kw_t, gc, summary=smry)
+                            key_idx_r = st.session_state.get("groq_key_idx", 0)
+                            gc = Groq(api_key=groq_keys[key_idx_r])
+                            try:
+                                new_title, tokens = claude_service.generate_title_single(kw_t, gc, summary=smry)
+                            except Exception as e:
+                                err_s = str(e)
+                                if ("429" in err_s or "rate_limit" in err_s.lower()) and key_idx_r + 1 < len(groq_keys):
+                                    key_idx_r += 1
+                                    st.session_state.groq_key_idx = key_idx_r
+                                    gc = Groq(api_key=groq_keys[key_idx_r])
+                                    new_title, tokens = claude_service.generate_title_single(kw_t, gc, summary=smry)
+                                else:
+                                    raise
                             _add_groq_tokens(tokens)
                             updated = list(st.session_state.bulk_items)
                             updated[i] = {**updated[i], "title": new_title}

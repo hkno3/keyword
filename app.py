@@ -1045,7 +1045,7 @@ if st.session_state.bulk_items:
 
         if st.session_state.get(f"bulk_links_{i}"):
             _cached_u = sitemap_service.load_cache()
-            _rel_u = sitemap_service.find_related(item["keyword"], _cached_u, n=6)
+            _rel_u = sitemap_service.find_related(item["keyword"] + " " + cur_title, _cached_u, n=6)
             _internal = _rel_u[:3]
             _related = _rel_u[3:6]
             with st.container(border=True):

@@ -1011,10 +1011,10 @@ if st.session_state.bulk_items:
                         st.error(f"❌ {e}")
 
         if st.session_state.get(f"bulk_links_{i}"):
-            # 첫 오픈 시 자동 매칭 초기화
+            # 첫 오픈 시 자동 매칭 초기화 (키워드만 사용)
             if not st.session_state.get(f"bulk_links_init_{i}"):
                 _cu = sitemap_service.load_cache()
-                _ru = sitemap_service.find_related(item["keyword"] + " " + cur_title, _cu, n=6)
+                _ru = sitemap_service.find_related(item["keyword"], _cu, n=6)
                 st.session_state[f"bulk_internal_links_{i}"] = _ru[:3]
                 st.session_state[f"bulk_related_posts_{i}"] = _ru[3:6]
                 st.session_state[f"bulk_links_init_{i}"] = True
@@ -1052,7 +1052,7 @@ if st.session_state.bulk_items:
                         st.caption("없음")
 
                 st.caption("**🔍 링크 직접 검색**")
-                sq1, sq2, sq3 = st.columns([4, 1, 1])
+                sq1, sq2 = st.columns([4, 1])
                 with sq1:
                     _sq = st.text_input("", placeholder="검색어 입력",
                                         key=f"bulk_lq_{i}", label_visibility="collapsed")
@@ -1062,15 +1062,6 @@ if st.session_state.bulk_items:
                             _cu2 = sitemap_service.load_cache()
                             st.session_state[f"bulk_lresults_{i}"] = sitemap_service.find_related(_sq.strip(), _cu2, n=10)
                             st.rerun()
-                with sq3:
-                    if st.button("🔄 재매칭", key=f"bulk_lrematch_{i}", use_container_width=True,
-                                 help="키워드+제목으로 자동 재검색"):
-                        _cu3 = sitemap_service.load_cache()
-                        _ru2 = sitemap_service.find_related(item["keyword"] + " " + cur_title, _cu3, n=6)
-                        st.session_state[f"bulk_internal_links_{i}"] = _ru2[:3]
-                        st.session_state[f"bulk_related_posts_{i}"] = _ru2[3:6]
-                        st.session_state.pop(f"bulk_lresults_{i}", None)
-                        st.rerun()
 
                 _sr_list = st.session_state.get(f"bulk_lresults_{i}", [])
                 if _sr_list:

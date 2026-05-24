@@ -926,15 +926,19 @@ if st.session_state.bulk_items:
                     st.session_state[f"bulk_sched_input_{i}"] = dt.strftime("%Y-%m-%d %H:%M")
                 st.rerun()
 
-    def _do_generate_post(item: dict, edited_title: str) -> dict:
+    def _do_generate_post(item: dict, edited_title: str,
+                          internal_links=None, related_posts=None) -> dict:
         kw = item["keyword"]
-        cached_u = sitemap_service.load_cache()
-        rel_u = sitemap_service.find_related(kw, cached_u, n=6)
+        if internal_links is None and related_posts is None:
+            cached_u = sitemap_service.load_cache()
+            rel_u = sitemap_service.find_related(kw, cached_u, n=6)
+            internal_links = rel_u[:3] or None
+            related_posts = rel_u[3:6] or None
         post_data, used_k = gemini_service.generate_blog_post(
             keyword=kw, title=edited_title,
             api_key1=gemini_key1, api_key2=gemini_key2,
-            internal_links=rel_u[:3] or None,
-            related_posts=rel_u[3:6] or None,
+            internal_links=internal_links or None,
+            related_posts=related_posts or None,
         )
         st.session_state.gemini_key_used = used_k
         _add_gemini_call()
@@ -1007,7 +1011,9 @@ if st.session_state.bulk_items:
                 else:
                     try:
                         gen_title = cur_title
-                        pd = _do_generate_post(item, gen_title)
+                        _il = st.session_state.get(f"bulk_internal_links_{i}") if st.session_state.get(f"bulk_links_init_{i}") else None
+                        _rp = st.session_state.get(f"bulk_related_posts_{i}") if st.session_state.get(f"bulk_links_init_{i}") else None
+                        pd = _do_generate_post(item, gen_title, internal_links=_il, related_posts=_rp)
                         st.session_state.bulk_items[i]["post_data"] = pd
                         st.rerun()
                     except Exception as e:
@@ -1044,26 +1050,94 @@ if st.session_state.bulk_items:
                         st.error(f"❌ {e}")
 
         if st.session_state.get(f"bulk_links_{i}"):
-            _cached_u = sitemap_service.load_cache()
-            _rel_u = sitemap_service.find_related(item["keyword"] + " " + cur_title, _cached_u, n=6)
-            _internal = _rel_u[:3]
-            _related = _rel_u[3:6]
+            # 첫 오픈 시 자동 매칭 초기화
+            if not st.session_state.get(f"bulk_links_init_{i}"):
+                _cu = sitemap_service.load_cache()
+                _ru = sitemap_service.find_related(item["keyword"] + " " + cur_title, _cu, n=6)
+                st.session_state[f"bulk_internal_links_{i}"] = _ru[:3]
+                st.session_state[f"bulk_related_posts_{i}"] = _ru[3:6]
+                st.session_state[f"bulk_links_init_{i}"] = True
+
+            _int_links = list(st.session_state.get(f"bulk_internal_links_{i}", []))
+            _rel_posts = list(st.session_state.get(f"bulk_related_posts_{i}", []))
+
             with st.container(border=True):
                 lc1, lc2 = st.columns(2)
                 with lc1:
                     st.caption("**📎 내부링크**")
-                    if _internal:
-                        for u in _internal:
+                    for j, u in enumerate(_int_links):
+                        uc1, uc2 = st.columns([9, 1])
+                        with uc1:
                             st.caption(u)
-                    else:
+                        with uc2:
+                            if st.button("✕", key=f"del_int_{i}_{j}"):
+                                _int_links.pop(j)
+                                st.session_state[f"bulk_internal_links_{i}"] = _int_links
+                                st.rerun()
+                    if not _int_links:
                         st.caption("없음")
                 with lc2:
                     st.caption("**📖 함께보면 좋은 글**")
-                    if _related:
-                        for u in _related:
+                    for j, u in enumerate(_rel_posts):
+                        uc1, uc2 = st.columns([9, 1])
+                        with uc1:
                             st.caption(u)
-                    else:
+                        with uc2:
+                            if st.button("✕", key=f"del_rel_{i}_{j}"):
+                                _rel_posts.pop(j)
+                                st.session_state[f"bulk_related_posts_{i}"] = _rel_posts
+                                st.rerun()
+                    if not _rel_posts:
                         st.caption("없음")
+
+                st.caption("**🔍 링크 직접 검색**")
+                sq1, sq2, sq3 = st.columns([4, 1, 1])
+                with sq1:
+                    _sq = st.text_input("", placeholder="검색어 입력",
+                                        key=f"bulk_lq_{i}", label_visibility="collapsed")
+                with sq2:
+                    if st.button("검색", key=f"bulk_lsearch_{i}", use_container_width=True):
+                        if _sq.strip():
+                            _cu2 = sitemap_service.load_cache()
+                            st.session_state[f"bulk_lresults_{i}"] = sitemap_service.find_related(_sq.strip(), _cu2, n=10)
+                            st.rerun()
+                with sq3:
+                    if st.button("🔄 재매칭", key=f"bulk_lrematch_{i}", use_container_width=True,
+                                 help="키워드+제목으로 자동 재검색"):
+                        _cu3 = sitemap_service.load_cache()
+                        _ru2 = sitemap_service.find_related(item["keyword"] + " " + cur_title, _cu3, n=6)
+                        st.session_state[f"bulk_internal_links_{i}"] = _ru2[:3]
+                        st.session_state[f"bulk_related_posts_{i}"] = _ru2[3:6]
+                        st.session_state.pop(f"bulk_lresults_{i}", None)
+                        st.rerun()
+
+                _sr_list = st.session_state.get(f"bulk_lresults_{i}", [])
+                if _sr_list:
+                    st.caption(f"검색 결과 {len(_sr_list)}개 — 체크 후 추가")
+                    for j, u in enumerate(_sr_list):
+                        st.checkbox(u, key=f"bulk_lchk_{i}_{j}")
+                    _selected = [_sr_list[j] for j in range(len(_sr_list))
+                                 if st.session_state.get(f"bulk_lchk_{i}_{j}", False)]
+                    if _selected:
+                        rc1, rc2 = st.columns(2)
+                        with rc1:
+                            if st.button("📎 내부링크로 추가", key=f"add_int_{i}", use_container_width=True):
+                                cur = list(st.session_state.get(f"bulk_internal_links_{i}", []))
+                                for u in _selected:
+                                    if u not in cur:
+                                        cur.append(u)
+                                st.session_state[f"bulk_internal_links_{i}"] = cur
+                                st.session_state.pop(f"bulk_lresults_{i}", None)
+                                st.rerun()
+                        with rc2:
+                            if st.button("📖 함께보면 좋은 글로 추가", key=f"add_rel_{i}", use_container_width=True):
+                                cur = list(st.session_state.get(f"bulk_related_posts_{i}", []))
+                                for u in _selected:
+                                    if u not in cur:
+                                        cur.append(u)
+                                st.session_state[f"bulk_related_posts_{i}"] = cur
+                                st.session_state.pop(f"bulk_lresults_{i}", None)
+                                st.rerun()
 
         if st.session_state.get(f"bulk_prev_{i}") and item.get("post_data"):
             with st.expander(f"👁️ {item['keyword']} 미리보기", expanded=True):
@@ -1075,6 +1149,12 @@ if st.session_state.bulk_items:
         if st.button("🗑️ 초기화", use_container_width=True):
             st.session_state.bulk_items = []
             st.session_state.bulk_title_versions = {}
+            for _k in [k for k in st.session_state if any(
+                k.startswith(p) for p in [
+                    "bulk_links_", "bulk_internal_links_", "bulk_related_posts_",
+                    "bulk_lresults_", "bulk_lq_", "bulk_lchk_",
+                ])]:
+                del st.session_state[_k]
             st.rerun()
     with col_gen:
         if not gemini_key1:
@@ -1093,7 +1173,9 @@ if st.session_state.bulk_items:
                     continue
                 try:
                     status_b.info(f"[{i+1}/{n_b}] {kw_b} — 글 생성 중...")
-                    post_data_b = _do_generate_post(item, title_b)
+                    _il_b = st.session_state.get(f"bulk_internal_links_{i}") if st.session_state.get(f"bulk_links_init_{i}") else None
+                    _rp_b = st.session_state.get(f"bulk_related_posts_{i}") if st.session_state.get(f"bulk_links_init_{i}") else None
+                    post_data_b = _do_generate_post(item, title_b, internal_links=_il_b, related_posts=_rp_b)
                     st.session_state.bulk_items[i]["post_data"] = post_data_b
                     success_cnt += 1
                 except Exception as e:

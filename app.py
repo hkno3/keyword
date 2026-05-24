@@ -712,7 +712,7 @@ st.divider()
 st.subheader("📋 키워드 히스토리")
 
 _hist = _load_keywords_history()
-_hist_kws = list(_hist.keys())
+_hist_kws = sorted(_hist.keys())
 
 if not _hist_kws:
     st.caption("키워드 히스토리가 없습니다. 위에서 황금 롱테일 키워드를 찾아주세요.")

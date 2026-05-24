@@ -48,23 +48,36 @@ def _save_wp_sites(sites: list):
 
 def _load_groq_usage() -> dict:
     today = datetime.now().strftime("%Y-%m-%d")
+    empty = {"date": today, "key1_tokens": 0, "key2_tokens": 0}
     try:
         with open(GROQ_USAGE_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
         if data.get("date") != today:
-            return {"date": today, "tokens": 0}
+            return empty
+        # 구버전 마이그레이션
+        if "tokens" in data and "key1_tokens" not in data:
+            return {"date": today, "key1_tokens": data["tokens"], "key2_tokens": 0}
         return data
     except Exception:
-        return {"date": today, "tokens": 0}
+        return empty
 
-def _save_groq_usage(tokens: int):
+def _save_groq_usage(key1: int, key2: int):
     today = datetime.now().strftime("%Y-%m-%d")
     with open(GROQ_USAGE_FILE, "w", encoding="utf-8") as f:
-        json.dump({"date": today, "tokens": tokens}, f)
+        json.dump({"date": today, "key1_tokens": key1, "key2_tokens": key2}, f)
 
 def _add_groq_tokens(n: int):
-    st.session_state.groq_tokens = st.session_state.get("groq_tokens", 0) + n
-    _save_groq_usage(st.session_state.groq_tokens)
+    key_idx = st.session_state.get("groq_key_idx", 0)
+    k1 = st.session_state.get("groq_key1_tokens", 0)
+    k2 = st.session_state.get("groq_key2_tokens", 0)
+    if key_idx == 0:
+        k1 += n
+        st.session_state.groq_key1_tokens = k1
+    else:
+        k2 += n
+        st.session_state.groq_key2_tokens = k2
+    st.session_state.groq_tokens = k1 + k2
+    _save_groq_usage(k1, k2)
 
 def _load_gemini_usage() -> dict:
     today = datetime.now().strftime("%Y-%m-%d")
@@ -173,12 +186,15 @@ with st.sidebar:
         st.rerun()
     st.divider()
     st.markdown(f"**🤖 Groq 사용량 (오늘 {datetime.now().strftime('%m/%d')})**")
-    groq_tokens = st.session_state.get("groq_tokens", 0)
-    groq_pct = min(groq_tokens / 100000, 1.0)
-    st.progress(groq_pct)
-    st.caption(f"{groq_tokens:,} / 100,000 토큰 ({groq_pct*100:.1f}%)")
     used_key = st.session_state.get("groq_key_idx", 0) + 1
-    st.caption(f"현재 Key {used_key} 사용 중")
+    cur_tokens = st.session_state.get(f"groq_key{used_key}_tokens", 0)
+    groq_pct = min(cur_tokens / 100000, 1.0)
+    st.progress(groq_pct)
+    st.caption(f"Key {used_key}: {cur_tokens:,} / 100,000 토큰 ({groq_pct*100:.1f}%)")
+    k1 = st.session_state.get("groq_key1_tokens", 0)
+    k2 = st.session_state.get("groq_key2_tokens", 0)
+    if k2 > 0:
+        st.caption(f"Key1: {k1:,} / Key2: {k2:,}")
     st.markdown(f"**✨ Gemini 사용량 (오늘 {datetime.now().strftime('%m/%d')})**")
     gemini_calls = st.session_state.get("gemini_calls", 0)
     gemini_pct = min(gemini_calls / 20, 1.0)
@@ -431,7 +447,10 @@ for key in ["auto_keywords", "auto_crawled", "auto_running"]:
 if "keywords_history" not in st.session_state:
     st.session_state.keywords_history = _load_keywords_history()
 if "groq_tokens" not in st.session_state:
-    st.session_state.groq_tokens = _load_groq_usage()["tokens"]
+    _gu = _load_groq_usage()
+    st.session_state.groq_key1_tokens = _gu["key1_tokens"]
+    st.session_state.groq_key2_tokens = _gu["key2_tokens"]
+    st.session_state.groq_tokens = _gu["key1_tokens"] + _gu["key2_tokens"]
 if "gemini_calls" not in st.session_state:
     st.session_state.gemini_calls = _load_gemini_usage()["calls"]
 if "gemini_key_used" not in st.session_state:
@@ -937,7 +956,9 @@ if st.session_state.bulk_items:
                             gc = Groq(api_key=groq_keys[st.session_state.get("groq_key_idx", 0)])
                             new_title, tokens = claude_service.generate_title_single(kw_t, gc, summary=smry)
                             _add_groq_tokens(tokens)
-                            st.session_state.bulk_items[i]["title"] = new_title
+                            updated = list(st.session_state.bulk_items)
+                            updated[i] = {**updated[i], "title": new_title}
+                            st.session_state.bulk_items = updated
                             st.session_state.pop(f"bulk_title_{i}", None)
                             st.rerun()
                         except Exception as e:

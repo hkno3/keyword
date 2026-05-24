@@ -1022,16 +1022,42 @@ if st.session_state.bulk_items:
                 st.html(item["post_data"].get("content", ""))
 
     st.divider()
-    col_bulk, col_reset = st.columns([3, 1])
+    col_gen, col_pub, col_reset = st.columns([2, 2, 1])
     with col_reset:
         if st.button("🗑️ 초기화", use_container_width=True):
             st.session_state.bulk_items = []
             st.session_state.bulk_title_versions = {}
             st.rerun()
-    with col_bulk:
+    with col_gen:
         if not gemini_key1:
             st.error("사이드바에서 Gemini API 키를 입력해주세요.")
-        elif st.button("🚀 일괄 글생성 + 발행", type="primary", use_container_width=True):
+        elif st.button("✍️ 일괄 글생성", type="primary", use_container_width=True):
+            success_cnt, fail_cnt = 0, 0
+            prog_b = st.progress(0)
+            status_b = st.empty()
+            n_b = len(_bulk_items)
+            for i, item in enumerate(_bulk_items):
+                kw_b = item["keyword"]
+                _ver_b = st.session_state.bulk_title_versions.get(i, 0)
+                title_b = st.session_state.get(f"bulk_title_{i}_v{_ver_b}", item["title"])
+                if item.get("post_data"):
+                    prog_b.progress((i + 1) / n_b)
+                    continue
+                try:
+                    status_b.info(f"[{i+1}/{n_b}] {kw_b} — 글 생성 중...")
+                    post_data_b = _do_generate_post(item, title_b)
+                    st.session_state.bulk_items[i]["post_data"] = post_data_b
+                    success_cnt += 1
+                except Exception as e:
+                    fail_cnt += 1
+                    status_b.warning(f"❌ {kw_b}: {e}")
+                prog_b.progress((i + 1) / n_b)
+            prog_b.empty()
+            status_b.empty()
+            st.success(f"✅ 글생성 완료: {success_cnt}개 성공 / {fail_cnt}개 실패")
+            st.rerun()
+    with col_pub:
+        if st.button("🚀 일괄 발행", use_container_width=True):
             success_cnt, fail_cnt = 0, 0
             prog_b = st.progress(0)
             status_b = st.empty()
@@ -1043,24 +1069,23 @@ if st.session_state.bulk_items:
                 site_b = st.session_state.get(f"bulk_site_{i}", item["site_name"])
                 sched_b = st.session_state.get(f"bulk_sched_input_{i}", "").strip()
                 site_obj_b = next((s for s in wp_sites_pub if s["name"] == site_b), None)
-                if not site_obj_b:
+                post_data_b = item.get("post_data")
+                if not site_obj_b or not post_data_b:
                     fail_cnt += 1
                     prog_b.progress((i + 1) / n_b)
                     continue
                 try:
-                    status_b.info(f"[{i+1}/{n_b}] {kw_b} — 글 생성 중...")
-                    post_data_b = item.get("post_data") or _do_generate_post(item, title_b)
-                    st.session_state.bulk_items[i]["post_data"] = post_data_b
                     status_b.info(f"[{i+1}/{n_b}] {kw_b} — 발행 중...")
                     _do_publish(site_obj_b, post_data_b, title_b, sched_b)
                     _mark_keyword_published(kw_b)
                     success_cnt += 1
-                except Exception:
+                except Exception as e:
                     fail_cnt += 1
+                    status_b.warning(f"❌ {kw_b}: {e}")
                 prog_b.progress((i + 1) / n_b)
             prog_b.empty()
             status_b.empty()
-            st.success(f"✅ 완료: {success_cnt}개 성공 / {fail_cnt}개 실패")
+            st.success(f"✅ 발행 완료: {success_cnt}개 성공 / {fail_cnt}개 실패")
 
 # ── 세션 초기화 ───────────────────────────────────────────
 for key in ["keyword_table", "selected_kw", "titles"]:

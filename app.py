@@ -130,6 +130,8 @@ def _save_keywords_to_history(rows: list):
                     entry["doc_count"] = row["doc_count"]
                 if "mobile_ctr" in row:
                     entry["mobile_ctr"] = row["mobile_ctr"]
+                if "stars" in row:
+                    entry["star_count"] = len(row["stars"])
             history[kw] = entry
             seen.add(kw)
             added += 1
@@ -779,6 +781,8 @@ else:
                     _hist[kw]["total_search"] = vol.get("total_search", 0)
                     _hist[kw]["doc_count"] = doc
                     _hist[kw]["mobile_ctr"] = vol.get("mobile_ctr", 0)
+                    _, stars, _ = naver_api.competition_level(vol.get("total_search", 0), doc)
+                    _hist[kw]["star_count"] = len(stars)
                     _updated += 1
             _save_keywords_history(_hist)
             st.session_state.keywords_history = _hist
@@ -827,7 +831,9 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
                         doc_count = _hist[kw].get("doc_count", "")
                         mobile_ctr = _hist[kw].get("mobile_ctr", "")
                         ctr_str = f"{mobile_ctr:.2f}" if mobile_ctr != "" else ""
-                        stat_str = f"{total_search}|{doc_count}|{ctr_str}" if total_search != "" and doc_count != "" else ""
+                        star_count = _hist[kw].get("star_count", "")
+                        star_str = f"⭐{star_count}" if star_count != "" else ""
+                        stat_str = f"{total_search}|{doc_count}|{ctr_str}|{star_str}" if total_search != "" and doc_count != "" else ""
                         if is_pub:
                             st.markdown(
                                 f'<p style="color:#999;margin:0;font-size:0.78em;">'

@@ -826,14 +826,14 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
                             st.markdown(
                                 f'<p style="color:#999;margin:0;font-size:0.78em;">'
                                 f'✅ {kw}<br><span style="color:#4caf50;">발행됨</span>'
-                                + (f'&nbsp;&nbsp;<span style="color:#bbb;font-size:0.9em;">{stat_str}</span>' if stat_str else "")
+                                + (f'&nbsp;&nbsp;<span style="color:#bbb;font-size:1.0em;">{stat_str}</span>' if stat_str else "")
                                 + '</p>',
                                 unsafe_allow_html=True,
                             )
                         else:
                             st.markdown(
                                 f'<p style="margin:0;font-size:0.82em;"><b>{kw}</b>'
-                                + (f'&nbsp;&nbsp;<span style="color:#888;font-size:0.9em;">{stat_str}</span>' if stat_str else "")
+                                + (f'&nbsp;&nbsp;<span style="color:#888;font-size:1.0em;">{stat_str}</span>' if stat_str else "")
                                 + f'<br><span style="color:#888;font-size:0.85em;">{date_str}</span></p>',
                                 unsafe_allow_html=True,
                             )

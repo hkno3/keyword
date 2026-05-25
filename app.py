@@ -128,6 +128,8 @@ def _save_keywords_to_history(rows: list):
                     entry["total_search"] = row["total_search"]
                 if "doc_count" in row:
                     entry["doc_count"] = row["doc_count"]
+                if "mobile_ctr" in row:
+                    entry["mobile_ctr"] = row["mobile_ctr"]
             history[kw] = entry
             seen.add(kw)
             added += 1
@@ -793,7 +795,9 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
                         date_str = _hist[kw].get("first_found", "")
                         total_search = _hist[kw].get("total_search", "")
                         doc_count = _hist[kw].get("doc_count", "")
-                        stat_str = f"{total_search}|{doc_count}" if total_search != "" and doc_count != "" else ""
+                        mobile_ctr = _hist[kw].get("mobile_ctr", "")
+                        ctr_str = f"{mobile_ctr:.2f}" if mobile_ctr != "" else ""
+                        stat_str = f"{total_search}|{doc_count}|{ctr_str}" if total_search != "" and doc_count != "" else ""
                         if is_pub:
                             st.markdown(
                                 f'<p style="color:#999;margin:0;font-size:0.78em;">'

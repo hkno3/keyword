@@ -812,9 +812,15 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
                         break
                     kw = row_kws[j]
                     is_pub = _hist[kw].get("published", False)
-                    c_chk, c_kw, c_del = st.columns([1, 7, 1])
+                    c_chk, c_kw, c_pub, c_del = st.columns([1, 6, 1, 1])
                     with c_chk:
                         st.checkbox("", key=f"hist_chk_{kw}", label_visibility="collapsed")
+                    with c_pub:
+                        pub_toggled = st.checkbox("", key=f"hist_pub_{kw}", value=is_pub, label_visibility="collapsed", help="수동 발행 표시")
+                        if pub_toggled != is_pub:
+                            _hist[kw]["published"] = pub_toggled
+                            _save_keywords_history(_hist)
+                            st.rerun()
                     with c_kw:
                         date_str = _hist[kw].get("first_found", "")
                         total_search = _hist[kw].get("total_search", "")

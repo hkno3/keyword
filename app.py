@@ -749,7 +749,7 @@ if not _hist_kws:
     st.caption("키워드 히스토리가 없습니다. 위에서 황금 롱테일 키워드를 찾아주세요.")
 else:
     st.caption(f"총 {len(_hist_kws)}개 황금 롱테일 키워드 (모바일 클릭률 2% 이상)")
-    col_selall, col_desel, _ = st.columns([2, 2, 6])
+    col_selall, col_desel, col_stat, _ = st.columns([2, 2, 2, 4])
     with col_selall:
         if st.button("전체 선택", use_container_width=True):
             for kw in _hist_kws:
@@ -759,6 +759,30 @@ else:
         if st.button("선택 해제", use_container_width=True):
             for kw in _hist_kws:
                 st.session_state[f"hist_chk_{kw}"] = False
+            st.rerun()
+    with col_stat:
+        _missing_stat_kws = [kw for kw in _hist_kws if "total_search" not in _hist[kw]]
+        if st.button(f"📊 통계 채우기 ({len(_missing_stat_kws)}개)", use_container_width=True, disabled=len(_missing_stat_kws) == 0):
+            _naver_cid = os.getenv("NAVER_AD_CUSTOMER_ID", "")
+            _naver_akey = os.getenv("NAVER_AD_API_KEY", "")
+            _naver_skey = os.getenv("NAVER_AD_SECRET_KEY", "")
+            _naver_client_id = os.getenv("NAVER_CLIENT_ID", "")
+            _naver_client_secret = os.getenv("NAVER_CLIENT_SECRET", "")
+            with st.spinner(f"통계 조회 중... (0/{len(_missing_stat_kws)})"):
+                _vol_data = naver_api.get_search_volumes_batch(_missing_stat_kws, _naver_cid, _naver_akey, _naver_skey)
+                _doc_data = naver_api.get_doc_counts_parallel(_missing_stat_kws, _naver_client_id, _naver_client_secret)
+            _updated = 0
+            for kw in _missing_stat_kws:
+                vol = _vol_data.get(kw, {})
+                doc = _doc_data.get(kw, 0)
+                if vol:
+                    _hist[kw]["total_search"] = vol.get("total_search", 0)
+                    _hist[kw]["doc_count"] = doc
+                    _hist[kw]["mobile_ctr"] = vol.get("mobile_ctr", 0)
+                    _updated += 1
+            _save_keywords_history(_hist)
+            st.session_state.keywords_history = _hist
+            st.success(f"✅ {_updated}개 키워드 통계 업데이트 완료!")
             st.rerun()
 
     st.markdown("""<style>

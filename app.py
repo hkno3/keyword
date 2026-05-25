@@ -114,14 +114,21 @@ def _mark_keyword_published(kw: str):
         history[kw]["published"] = True
         _save_keywords_history(history)
 
-def _save_keywords_to_history(keywords: list):
+def _save_keywords_to_history(rows: list):
     history = _load_keywords_history()
     today = datetime.now().strftime("%Y-%m-%d")
     added = 0
     seen = set(history.keys())
-    for kw in keywords:
+    for row in rows:
+        kw = row["keyword"] if isinstance(row, dict) else row
         if kw and kw not in seen:
-            history[kw] = {"first_found": today}
+            entry = {"first_found": today}
+            if isinstance(row, dict):
+                if "total_search" in row:
+                    entry["total_search"] = row["total_search"]
+                if "doc_count" in row:
+                    entry["doc_count"] = row["doc_count"]
+            history[kw] = entry
             seen.add(kw)
             added += 1
     _save_keywords_history(history)
@@ -660,7 +667,7 @@ if start_btn:
         if collected:
             _run_longtail([r["keyword"] for r in collected])
             if st.session_state.get("longtail_table"):
-                kws = [r["keyword"] for r in st.session_state.longtail_table if r.get("mobile_ctr", 0) >= 2]
+                kws = [r for r in st.session_state.longtail_table if r.get("mobile_ctr", 0) >= 2]
                 added = _save_keywords_to_history(kws)
                 st.success(f"✅ 모바일 클릭률 2% 이상 키워드 {added}개 히스토리에 저장됐습니다.")
         st.rerun()
@@ -720,7 +727,7 @@ if st.session_state.longtail_table:
 """, height=50)
 
     if st.button("📥 히스토리에 저장", use_container_width=True):
-        kws = [r["keyword"] for r in st.session_state.longtail_table if r.get("mobile_ctr", 0) >= 2]
+        kws = [r for r in st.session_state.longtail_table if r.get("mobile_ctr", 0) >= 2]
         added = _save_keywords_to_history(kws)
         filtered_out = len(st.session_state.longtail_table) - len(kws)
         msg = f"✅ {added}개 저장됨 (모바일 클릭률 2% 이상)"
@@ -784,16 +791,22 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
                         st.checkbox("", key=f"hist_chk_{kw}", label_visibility="collapsed")
                     with c_kw:
                         date_str = _hist[kw].get("first_found", "")
+                        total_search = _hist[kw].get("total_search", "")
+                        doc_count = _hist[kw].get("doc_count", "")
+                        stat_str = f"{total_search}|{doc_count}" if total_search != "" and doc_count != "" else ""
                         if is_pub:
                             st.markdown(
                                 f'<p style="color:#999;margin:0;font-size:0.78em;">'
-                                f'✅ {kw}<br><span style="color:#4caf50;">발행됨</span></p>',
+                                f'✅ {kw}<br><span style="color:#4caf50;">발행됨</span>'
+                                + (f'&nbsp;&nbsp;<span style="color:#bbb;">{stat_str}</span>' if stat_str else "")
+                                + '</p>',
                                 unsafe_allow_html=True,
                             )
                         else:
                             st.markdown(
-                                f'<p style="margin:0;font-size:0.82em;"><b>{kw}</b><br>'
-                                f'<span style="color:#888;font-size:0.85em;">{date_str}</span></p>',
+                                f'<p style="margin:0;font-size:0.82em;"><b>{kw}</b>'
+                                + (f'&nbsp;&nbsp;<span style="color:#888;font-size:0.8em;">{stat_str}</span>' if stat_str else "")
+                                + f'<br><span style="color:#888;font-size:0.85em;">{date_str}</span></p>',
                                 unsafe_allow_html=True,
                             )
                     with c_del:

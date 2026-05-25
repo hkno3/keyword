@@ -751,7 +751,7 @@ if not _hist_kws:
     st.caption("키워드 히스토리가 없습니다. 위에서 황금 롱테일 키워드를 찾아주세요.")
 else:
     st.caption(f"총 {len(_hist_kws)}개 황금 롱테일 키워드 (모바일 클릭률 2% 이상)")
-    col_selall, col_desel, col_stat, _ = st.columns([2, 2, 2, 4])
+    col_selall, col_desel, col_stat, col_sort = st.columns([2, 2, 2, 4])
     with col_selall:
         if st.button("전체 선택", use_container_width=True):
             for kw in _hist_kws:
@@ -763,7 +763,7 @@ else:
                 st.session_state[f"hist_chk_{kw}"] = False
             st.rerun()
     with col_stat:
-        _missing_stat_kws = [kw for kw in _hist_kws if "total_search" not in _hist[kw]]
+        _missing_stat_kws = [kw for kw in _hist_kws if "total_search" not in _hist[kw] or "star_count" not in _hist[kw]]
         if st.button(f"📊 통계 채우기 ({len(_missing_stat_kws)}개)", use_container_width=True, disabled=len(_missing_stat_kws) == 0):
             _naver_cid = os.getenv("NAVER_AD_CUSTOMER_ID", "")
             _naver_akey = os.getenv("NAVER_AD_API_KEY", "")
@@ -788,6 +788,18 @@ else:
             st.session_state.keywords_history = _hist
             st.success(f"✅ {_updated}개 키워드 통계 업데이트 완료!")
             st.rerun()
+    with col_sort:
+        _sort_options = ["가나다순", "검색량 높은 순", "문서수 낮은 순", "모바일 클릭률 높은 순", "별점 높은 순"]
+        _sort_by = st.selectbox("정렬", _sort_options, label_visibility="collapsed", key="hist_sort")
+
+    if _sort_by == "검색량 높은 순":
+        _hist_kws = sorted(_hist_kws, key=lambda k: _hist[k].get("total_search", 0), reverse=True)
+    elif _sort_by == "문서수 낮은 순":
+        _hist_kws = sorted(_hist_kws, key=lambda k: _hist[k].get("doc_count", 9999999))
+    elif _sort_by == "모바일 클릭률 높은 순":
+        _hist_kws = sorted(_hist_kws, key=lambda k: _hist[k].get("mobile_ctr", 0), reverse=True)
+    elif _sort_by == "별점 높은 순":
+        _hist_kws = sorted(_hist_kws, key=lambda k: _hist[k].get("star_count", 0), reverse=True)
 
     st.markdown("""<style>
 div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stHorizontalBlock"] {
@@ -833,7 +845,11 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
                         ctr_str = f"{mobile_ctr:.2f}" if mobile_ctr != "" else ""
                         star_count = _hist[kw].get("star_count", "")
                         star_str = f"⭐{star_count}" if star_count != "" else ""
-                        stat_str = f"{total_search}|{doc_count}|{ctr_str}|{star_str}" if total_search != "" and doc_count != "" else ""
+                        if total_search != "" and doc_count != "":
+                            parts = [str(total_search), str(doc_count), ctr_str, star_str]
+                            stat_str = "|".join(p for p in parts if p)
+                        else:
+                            stat_str = ""
                         if is_pub:
                             st.markdown(
                                 f'<p style="color:#999;margin:0;font-size:0.78em;">'

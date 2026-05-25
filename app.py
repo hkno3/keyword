@@ -763,7 +763,7 @@ else:
                 st.session_state[f"hist_chk_{kw}"] = False
             st.rerun()
     with col_stat:
-        _missing_stat_kws = [kw for kw in _hist_kws if "total_search" not in _hist[kw]]
+        _missing_stat_kws = [kw for kw in _hist_kws if "total_search" not in _hist[kw] or "star_count" not in _hist[kw]]
         if st.button(f"📊 통계 채우기 ({len(_missing_stat_kws)}개)", use_container_width=True, disabled=len(_missing_stat_kws) == 0):
             _naver_cid = os.getenv("NAVER_AD_CUSTOMER_ID", "")
             _naver_akey = os.getenv("NAVER_AD_API_KEY", "")
@@ -833,7 +833,11 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
                         ctr_str = f"{mobile_ctr:.2f}" if mobile_ctr != "" else ""
                         star_count = _hist[kw].get("star_count", "")
                         star_str = f"⭐{star_count}" if star_count != "" else ""
-                        stat_str = f"{total_search}|{doc_count}|{ctr_str}|{star_str}" if total_search != "" and doc_count != "" else ""
+                        if total_search != "" and doc_count != "":
+                            parts = [str(total_search), str(doc_count), ctr_str, star_str]
+                            stat_str = "|".join(p for p in parts if p)
+                        else:
+                            stat_str = ""
                         if is_pub:
                             st.markdown(
                                 f'<p style="color:#999;margin:0;font-size:0.78em;">'

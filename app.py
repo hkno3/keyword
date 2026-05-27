@@ -1088,17 +1088,28 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
 
     # ── 블랙리스트 섹션 ──────────────────────────────────────
     _bl_kws = sorted(_blacklist.keys())
-    if _bl_kws:
-        with st.expander(f"⬛ 블랙리스트 ({len(_bl_kws)}개) — 이미 발행한 키워드"):
-            bl_dl_col, bl_empty = st.columns([2, 8])
-            with bl_dl_col:
-                st.download_button(
-                    "💾 JSON 저장",
-                    data=json.dumps(_blacklist, ensure_ascii=False, indent=2),
-                    file_name=f"keywords_blacklist_{datetime.now().strftime('%Y%m%d')}.json",
-                    mime="application/json",
-                    use_container_width=True,
-                )
+    with st.expander(f"⬛ 블랙리스트 ({len(_bl_kws)}개) — 이미 발행한 키워드"):
+        bl_dl_col, bl_up_col, bl_empty = st.columns([2, 3, 5])
+        with bl_dl_col:
+            st.download_button(
+                "💾 JSON 저장",
+                data=json.dumps(_blacklist, ensure_ascii=False, indent=2),
+                file_name=f"keywords_blacklist_{datetime.now().strftime('%Y%m%d')}.json",
+                mime="application/json",
+                use_container_width=True,
+            )
+        with bl_up_col:
+            _bl_upload = st.file_uploader("📂 JSON 불러오기", type="json", key="bl_uploader", label_visibility="visible")
+            if _bl_upload:
+                try:
+                    _uploaded_bl = json.load(_bl_upload)
+                    _blacklist.update(_uploaded_bl)
+                    _save_blacklist(_blacklist)
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ {e}")
+        if _bl_kws:
+            st.markdown("---")
             for _row_s in range(0, len(_bl_kws), 3):
                 _bl_row = _bl_kws[_row_s:_row_s + 3]
                 _bl_grid = st.columns(3)

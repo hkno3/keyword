@@ -1086,48 +1086,6 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
                         _save_keywords_history(_hist)
                         st.rerun()
 
-    # ── 블랙리스트 섹션 ──────────────────────────────────────
-    _bl_kws = sorted(_blacklist.keys())
-    with st.expander(f"⬛ 블랙리스트 ({len(_bl_kws)}개) — 이미 발행한 키워드"):
-        bl_dl_col, bl_up_col, bl_empty = st.columns([2, 3, 5])
-        with bl_dl_col:
-            st.download_button(
-                "💾 JSON 저장",
-                data=json.dumps(_blacklist, ensure_ascii=False, indent=2),
-                file_name=f"keywords_blacklist_{datetime.now().strftime('%Y%m%d')}.json",
-                mime="application/json",
-                use_container_width=True,
-            )
-        with bl_up_col:
-            _bl_upload = st.file_uploader("📂 JSON 불러오기", type="json", key="bl_uploader", label_visibility="visible")
-            if _bl_upload:
-                try:
-                    _uploaded_bl = json.load(_bl_upload)
-                    _blacklist.update(_uploaded_bl)
-                    _save_blacklist(_blacklist)
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"❌ {e}")
-        if _bl_kws:
-            st.markdown("---")
-            for _row_s in range(0, len(_bl_kws), 3):
-                _bl_row = _bl_kws[_row_s:_row_s + 3]
-                _bl_grid = st.columns(3)
-                for _j in range(3):
-                    with _bl_grid[_j]:
-                        if _j >= len(_bl_row):
-                            break
-                        _bk = _bl_row[_j]
-                        _bk_date = _blacklist[_bk].get("moved_at", "")
-                        bc1, bc2 = st.columns([5, 1])
-                        with bc1:
-                            st.markdown(f'<p style="margin:0;font-size:0.80em;">⬛ <b>{_bk}</b>' + (f'&nbsp;<span style="color:#666;font-size:0.76em;">{_bk_date}</span>' if _bk_date else "") + '</p>', unsafe_allow_html=True)
-                        with bc2:
-                            if st.button("✕", key=f"bl_del_{_bk}"):
-                                del _blacklist[_bk]
-                                _save_blacklist(_blacklist)
-                                st.rerun()
-
     selected_kws_for_gen = [kw for kw in _hist_kws if st.session_state.get(f"hist_chk_{kw}")]
     n_sel = len(selected_kws_for_gen)
 
@@ -1154,6 +1112,48 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
             if skip_cnt:
                 st.info(f"{skip_cnt}개는 이미 있어서 건너뜁니다.")
             st.rerun()
+
+# ── 블랙리스트 섹션 ──────────────────────────────────────
+_bl_kws = sorted(_blacklist.keys())
+with st.expander(f"⬛ 블랙리스트 ({len(_bl_kws)}개) — 이미 발행한 키워드"):
+    bl_dl_col, bl_up_col, bl_empty = st.columns([2, 3, 5])
+    with bl_dl_col:
+        st.download_button(
+            "💾 JSON 저장",
+            data=json.dumps(_blacklist, ensure_ascii=False, indent=2),
+            file_name=f"keywords_blacklist_{datetime.now().strftime('%Y%m%d')}.json",
+            mime="application/json",
+            use_container_width=True,
+        )
+    with bl_up_col:
+        _bl_upload = st.file_uploader("📂 JSON 불러오기", type="json", key="bl_uploader", label_visibility="visible")
+        if _bl_upload:
+            try:
+                _uploaded_bl = json.load(_bl_upload)
+                _blacklist.update(_uploaded_bl)
+                _save_blacklist(_blacklist)
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ {e}")
+    if _bl_kws:
+        st.markdown("---")
+        for _row_s in range(0, len(_bl_kws), 3):
+            _bl_row = _bl_kws[_row_s:_row_s + 3]
+            _bl_grid = st.columns(3)
+            for _j in range(3):
+                with _bl_grid[_j]:
+                    if _j >= len(_bl_row):
+                        break
+                    _bk = _bl_row[_j]
+                    _bk_date = _blacklist[_bk].get("moved_at", "")
+                    bc1, bc2 = st.columns([5, 1])
+                    with bc1:
+                        st.markdown(f'<p style="margin:0;font-size:0.80em;">⬛ <b>{_bk}</b>' + (f'&nbsp;<span style="color:#666;font-size:0.76em;">{_bk_date}</span>' if _bk_date else "") + '</p>', unsafe_allow_html=True)
+                    with bc2:
+                        if st.button("✕", key=f"bl_del_{_bk}"):
+                            del _blacklist[_bk]
+                            _save_blacklist(_blacklist)
+                            st.rerun()
 
 # ── 발행 테이블 ───────────────────────────────────────────
 if st.session_state.bulk_items:

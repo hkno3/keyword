@@ -435,11 +435,13 @@ def _run_longtail(seed_keywords: list):
     naver_secret = os.getenv("NAVER_CLIENT_SECRET", "")
 
     with st.spinner("자동완성 수집 중..."):
-        ac_all = []
+        ac_parent_map = {}  # {자식키워드: 부모키워드}
         for kw in seed_keywords:
             ac = naver_api.get_autocomplete(kw)
-            ac_all.extend(ac)
-        ac_all = list(dict.fromkeys(ac_all))
+            for child in ac:
+                if child not in ac_parent_map:
+                    ac_parent_map[child] = kw
+        ac_all = list(ac_parent_map.keys())
 
     if not ac_all:
         st.warning("자동완성 키워드를 찾을 수 없어요.")
@@ -453,6 +455,7 @@ def _run_longtail(seed_keywords: list):
 
     table = naver_api.build_keyword_table(related, doc_counts)
     st.session_state.longtail_table = table
+    st.session_state.longtail_parent_map = ac_parent_map
 
 # ── 자동 키워드 찾기 ─────────────────────────────────────
 st.subheader("🤖 자동 키워드 찾기")
@@ -678,14 +681,14 @@ if start_btn:
 
             _run_longtail([r["keyword"] for r in collected])
             if st.session_state.get("longtail_table"):
-                parent_kw_list = [r["keyword"] for r in collected]
+                _parent_map = st.session_state.get("longtail_parent_map", {})
                 child_rows = []
                 for r in st.session_state.longtail_table:
                     if r.get("mobile_ctr", 0) >= 2:
                         child_row = dict(r)
-                        matched = next((p for p in parent_kw_list if r["keyword"].startswith(p)), None)
-                        if matched:
-                            child_row["parent_keyword"] = matched
+                        parent_kw = _parent_map.get(r["keyword"])
+                        if parent_kw:
+                            child_row["parent_keyword"] = parent_kw
                         child_rows.append(child_row)
                 added = _save_keywords_to_history(child_rows)
                 st.success(f"✅ 모바일 클릭률 2% 이상 키워드 {added}개 히스토리에 저장됐습니다.")

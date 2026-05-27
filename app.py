@@ -757,31 +757,45 @@ if st.session_state.longtail_table:
 
 def _build_parent_groups(hist_kws: list, hist: dict):
     kw_set = set(hist_kws)
-    groups = {}
-    has_parent = set()
+    direct_parent = {}
+
+    # stored parent_keyword 우선
     for kw in hist_kws:
         p = hist[kw].get("parent_keyword", "")
         if p and p in kw_set:
-            groups.setdefault(p, []).append(kw)
-            has_parent.add(kw)
-    no_parent_kws = [kw for kw in hist_kws if kw not in has_parent]
-    # 자동 감지: 먼저 parent_map 전체 계산
-    parent_map = {}
-    for child in no_parent_kws:
+            direct_parent[kw] = p
+
+    # 자동 감지 (stored 없는 키워드만, 4글자 이상 후보)
+    for child in hist_kws:
+        if child in direct_parent:
+            continue
         best = None
-        for cand in no_parent_kws:
+        for cand in hist_kws:
             if cand != child and len(cand) >= 4 and child.startswith(cand):
                 if best is None or len(cand) > len(best):
                     best = cand
         if best:
-            parent_map[child] = best
-    # 자기 자신이 다른 키워드의 부모인 경우 자식으로 등록하지 않음 (중복 key 방지)
-    auto_parents = set(parent_map.values())
-    for child, parent in parent_map.items():
-        if child not in auto_parents:
-            groups.setdefault(parent, []).append(child)
-            has_parent.add(child)
-    orphans = [kw for kw in hist_kws if kw not in has_parent and kw not in groups]
+            direct_parent[child] = best
+
+    # 체인 따라 최상위 부모(root) 찾기
+    def find_root(kw, depth=0):
+        if depth > 20:
+            return kw
+        p = direct_parent.get(kw)
+        if p is None:
+            return kw
+        return find_root(p, depth + 1)
+
+    # 최상위 부모 기준으로 모두 귀속
+    groups = {}
+    for kw in hist_kws:
+        root = find_root(kw)
+        if root != kw:
+            groups.setdefault(root, []).append(kw)
+
+    # 고아: 부모도 없고 자식도 없는 키워드
+    has_parent_set = set(direct_parent.keys())
+    orphans = [kw for kw in hist_kws if kw not in groups and kw not in has_parent_set]
     return groups, orphans
 
 

@@ -771,7 +771,7 @@ def _build_parent_groups(hist_kws: list, hist: dict):
             continue
         best = None
         for cand in hist_kws:
-            if cand != child and len(cand) >= 4 and child.startswith(cand):
+            if cand != child and len(cand) >= 2 and child.startswith(cand):
                 if best is None or len(cand) > len(best):
                     best = cand
         if best:

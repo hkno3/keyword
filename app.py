@@ -917,7 +917,7 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
                         else:
                             st.markdown(f'<p style="margin:0;font-size:0.84em;"><b>📁 {_pk}</b>' + (f'&nbsp;<span style="color:#888;">{_pk_stat}</span>' if _pk_stat else "") + f'&nbsp;<span style="color:#666;font-size:0.80em;">({len(_pk_ch)})</span></p>', unsafe_allow_html=True)
                     with pc3:
-                        if st.button("▼" if _pk_exp else "↓", key=f"hist_grp_exp_{_pk}"):
+                        if st.button("▼" if _pk_exp else "↓", key=f"hist_btn_{_pk}"):
                             st.session_state[f"hist_grp_exp_{_pk}"] = not _pk_exp
                             st.rerun()
                     with pc4:

@@ -817,17 +817,15 @@ def _build_parent_groups(hist_kws: list, hist: dict):
             return kw
         return find_root(p, depth + 1)
 
-    # 최상위 부모 기준으로 모두 귀속
+    # 최상위 부모 기준으로 모두 귀속, 고아도 빈 자식으로 부모 그리드에 포함
     groups = {}
     for kw in hist_kws:
         root = find_root(kw)
         if root != kw:
             groups.setdefault(root, []).append(kw)
-
-    # 고아: 부모도 없고 자식도 없는 키워드
-    has_parent_set = set(direct_parent.keys())
-    orphans = [kw for kw in hist_kws if kw not in groups and kw not in has_parent_set]
-    return groups, orphans
+        else:
+            groups.setdefault(kw, [])
+    return groups
 
 
 # ── 키워드 히스토리 ───────────────────────────────────────
@@ -926,8 +924,8 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
     font-size: 11px; line-height: 1;
 }
 </style>""", unsafe_allow_html=True)
-    _groups, _orphans = _build_parent_groups(_hist_kws, _hist)
-    _parent_cands = sorted(set(list(_groups.keys()) + [k for k in _hist_kws if _hist[k].get("is_parent")]))
+    _groups = _build_parent_groups(_hist_kws, _hist)
+
     with st.container(height=600):
         # 부모 그룹 — 정렬 적용 후 3열 그리드
         if _sort_by == "검색량 높은 순":
@@ -1016,57 +1014,6 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
                                     _hist[_ck]["published"] = _ck_pub_t
                                     _save_keywords_history(_hist)
                                     st.rerun()
-        # 부모 없는 키워드 — 3열 그리드
-        if _orphans:
-            st.markdown(f"<p style='margin:8px 0 4px;font-size:0.8em;color:#888;border-top:1px solid #333;padding-top:8px;'>부모 없는 키워드 ({len(_orphans)}개)</p>", unsafe_allow_html=True)
-            for _row_s in range(0, len(_orphans), 3):
-                _row_ows = _orphans[_row_s:_row_s + 3]
-                _ogrid = st.columns(3)
-                for _j in range(3):
-                    with _ogrid[_j]:
-                        if _j >= len(_row_ows):
-                            break
-                        _ow = _row_ows[_j]
-                        _ow_pub = _hist[_ow].get("published", False)
-                        _ow_ts = _hist[_ow].get("total_search", "")
-                        _ow_dc = _hist[_ow].get("doc_count", "")
-                        _ow_ctr = _hist[_ow].get("mobile_ctr", "")
-                        _ow_ctr_s = f"{_ow_ctr:.2f}" if _ow_ctr != "" else ""
-                        _ow_sc = _hist[_ow].get("star_count", "")
-                        _ow_star_s = f"⭐{_ow_sc}" if _ow_sc != "" else ""
-                        _ow_stat = "|".join(s for s in [str(_ow_ts), str(_ow_dc), _ow_ctr_s, _ow_star_s] if s) if _ow_ts != "" else ""
-                        ow1, ow2, ow3, ow4 = st.columns([1, 5, 1, 1])
-                        with ow1:
-                            st.checkbox("", key=f"hist_chk_{_ow}", label_visibility="collapsed")
-                        with ow2:
-                            _ow_in_bl = _ow in _blacklist
-                            if _ow_pub:
-                                st.markdown(f'<p style="color:#999;margin:0;font-size:0.78em;">✅ {_ow}' + (f'&nbsp;<span style="color:#bbb;">{_ow_stat}</span>' if _ow_stat else "") + '</p>', unsafe_allow_html=True)
-                            elif _ow_in_bl:
-                                st.markdown(f'<p style="color:#f44336;margin:0;font-size:0.80em;"><b>{_ow}</b>' + (f'&nbsp;<span style="color:#ef9a9a;">{_ow_stat}</span>' if _ow_stat else "") + ' ⚠️중복</p>', unsafe_allow_html=True)
-                            else:
-                                st.markdown(f'<p style="margin:0;font-size:0.80em;"><b>{_ow}</b>' + (f'&nbsp;<span style="color:#888;">{_ow_stat}</span>' if _ow_stat else "") + '</p>', unsafe_allow_html=True)
-                        with ow3:
-                            _ow_pub_t = st.checkbox("", key=f"hist_pub_{_ow}", value=_ow_pub, label_visibility="collapsed", help="수동 발행")
-                            if _ow_pub_t != _ow_pub:
-                                _hist[_ow]["published"] = _ow_pub_t
-                                _save_keywords_history(_hist)
-                                st.rerun()
-                        with ow4:
-                            if st.button("✕", key=f"hist_del_{_ow}"):
-                                today = datetime.now().strftime("%Y-%m-%d")
-                                _hist[_ow]["excluded"] = True
-                                _hist[_ow]["excluded_at"] = today
-                                _hist[_ow]["exclude_reason"] = "published" if _hist[_ow].get("published") else "deleted"
-                                _save_keywords_history(_hist)
-                                st.rerun()
-                        if _parent_cands:
-                            _sel_p = st.selectbox("", [""] + _parent_cands, key=f"assign_p_{_ow}", label_visibility="collapsed", placeholder="부모 지정...")
-                            if _sel_p:
-                                _hist[_ow]["parent_keyword"] = _sel_p
-                                _save_keywords_history(_hist)
-                                st.rerun()
-
     _excluded_kws = sorted([kw for kw, v in _hist.items() if v.get("excluded", False)])
     if _excluded_kws:
         with st.expander(f"🚫 제외 목록 ({len(_excluded_kws)}개)"):

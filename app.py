@@ -20,6 +20,7 @@ load_dotenv()
 
 CRAWLED_FILE = os.path.join(os.path.dirname(__file__), "crawled_links.json")
 KEYWORDS_HISTORY_FILE = os.path.join(os.path.dirname(__file__), "keywords_history.json")
+KEYWORDS_BLACKLIST_FILE = os.path.join(os.path.dirname(__file__), "keywords_blacklist.json")
 GROQ_USAGE_FILE = os.path.join(os.path.dirname(__file__), "groq_usage.json")
 GEMINI_USAGE_FILE = os.path.join(os.path.dirname(__file__), "gemini_usage.json")
 WP_SITES_FILE = os.path.join(os.path.dirname(__file__), "wp_sites.json")
@@ -96,6 +97,17 @@ def _add_gemini_call():
     st.session_state.gemini_calls = st.session_state.get("gemini_calls", 0) + 1
     with open(GEMINI_USAGE_FILE, "w", encoding="utf-8") as f:
         json.dump({"date": today, "calls": st.session_state.gemini_calls}, f)
+
+def _load_blacklist() -> dict:
+    try:
+        with open(KEYWORDS_BLACKLIST_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def _save_blacklist(bl: dict):
+    with open(KEYWORDS_BLACKLIST_FILE, "w", encoding="utf-8") as f:
+        json.dump(bl, f, ensure_ascii=False, indent=2)
 
 def _load_keywords_history() -> dict:
     try:
@@ -252,6 +264,22 @@ with st.sidebar:
         if os.path.exists(KEYWORDS_HISTORY_FILE):
             os.remove(KEYWORDS_HISTORY_FILE)
         st.session_state.keywords_history = {}
+        st.rerun()
+    if st.button("⬛ 발행됨 → 블랙리스트로 보내기", use_container_width=True):
+        _bl = _load_blacklist()
+        _h = _load_keywords_history()
+        _moved = 0
+        for kw, val in list(_h.items()):
+            if kw == "__meta__":
+                continue
+            if val.get("published"):
+                _bl[kw] = {"moved_at": datetime.now().strftime("%Y-%m-%d")}
+                del _h[kw]
+                _moved += 1
+        _save_blacklist(_bl)
+        _save_keywords_history(_h)
+        st.session_state.keywords_history = _h
+        st.success(f"✅ {_moved}개 블랙리스트로 이동")
         st.rerun()
     st.divider()
     st.markdown("**🗺️ 사이트맵**")
@@ -435,11 +463,13 @@ def _run_longtail(seed_keywords: list):
     naver_secret = os.getenv("NAVER_CLIENT_SECRET", "")
 
     with st.spinner("자동완성 수집 중..."):
-        ac_all = []
+        ac_parent_map = {}  # {자식키워드: 부모키워드}
         for kw in seed_keywords:
             ac = naver_api.get_autocomplete(kw)
-            ac_all.extend(ac)
-        ac_all = list(dict.fromkeys(ac_all))
+            for child in ac:
+                if child not in ac_parent_map:
+                    ac_parent_map[child] = kw
+        ac_all = list(ac_parent_map.keys())
 
     if not ac_all:
         st.warning("자동완성 키워드를 찾을 수 없어요.")
@@ -453,6 +483,7 @@ def _run_longtail(seed_keywords: list):
 
     table = naver_api.build_keyword_table(related, doc_counts)
     st.session_state.longtail_table = table
+    st.session_state.longtail_parent_map = ac_parent_map
 
 # ── 자동 키워드 찾기 ─────────────────────────────────────
 st.subheader("🤖 자동 키워드 찾기")
@@ -678,14 +709,14 @@ if start_btn:
 
             _run_longtail([r["keyword"] for r in collected])
             if st.session_state.get("longtail_table"):
-                parent_kw_list = [r["keyword"] for r in collected]
+                _parent_map = st.session_state.get("longtail_parent_map", {})
                 child_rows = []
                 for r in st.session_state.longtail_table:
                     if r.get("mobile_ctr", 0) >= 2:
                         child_row = dict(r)
-                        matched = next((p for p in parent_kw_list if r["keyword"].startswith(p)), None)
-                        if matched:
-                            child_row["parent_keyword"] = matched
+                        parent_kw = _parent_map.get(r["keyword"])
+                        if parent_kw:
+                            child_row["parent_keyword"] = parent_kw
                         child_rows.append(child_row)
                 added = _save_keywords_to_history(child_rows)
                 st.success(f"✅ 모바일 클릭률 2% 이상 키워드 {added}개 히스토리에 저장됐습니다.")
@@ -804,13 +835,14 @@ st.divider()
 st.subheader("📋 키워드 히스토리")
 
 _hist = _load_keywords_history()
-_hist_kws = sorted([kw for kw, v in _hist.items() if not v.get("excluded", False)])
+_blacklist = _load_blacklist()
+_hist_kws = sorted([kw for kw, v in _hist.items() if kw != "__meta__" and not v.get("excluded", False)])
 
 if not _hist_kws:
     st.caption("키워드 히스토리가 없습니다. 위에서 황금 롱테일 키워드를 찾아주세요.")
 else:
     st.caption(f"총 {len(_hist_kws)}개 황금 롱테일 키워드 (모바일 클릭률 2% 이상)")
-    col_selall, col_desel, col_stat, col_sort = st.columns([2, 2, 2, 4])
+    col_selall, col_desel, col_stat, col_stat_reset, col_sort = st.columns([2, 2, 3, 1, 4])
     with col_selall:
         if st.button("전체 선택", use_container_width=True):
             for kw in _hist_kws:
@@ -822,18 +854,26 @@ else:
                 st.session_state[f"hist_chk_{kw}"] = False
             st.rerun()
     with col_stat:
+        _last_stat_update = _hist.get("__meta__", {}).get("last_stat_update")
+        _stat_days_left = 0
+        if _last_stat_update:
+            _stat_elapsed = (datetime.now() - datetime.strptime(_last_stat_update, "%Y-%m-%d")).days
+            _stat_days_left = max(0, 30 - _stat_elapsed)
         _missing_stat_kws = [kw for kw in _hist_kws if "total_search" not in _hist[kw] or "star_count" not in _hist[kw]]
-        if st.button(f"📊 통계 채우기 ({len(_missing_stat_kws)}개)", use_container_width=True, disabled=len(_missing_stat_kws) == 0):
+        _stat_btn_disabled = _stat_days_left > 0 and len(_missing_stat_kws) == 0
+        _stat_btn_label = f"📊 통계 채우기 ({len(_missing_stat_kws)}개)" if not _stat_days_left else f"📊 통계 갱신 ({_stat_days_left}일 후)"
+        if st.button(_stat_btn_label, use_container_width=True, disabled=_stat_btn_disabled):
             _naver_cid = os.getenv("NAVER_AD_CUSTOMER_ID", "")
             _naver_akey = os.getenv("NAVER_AD_API_KEY", "")
             _naver_skey = os.getenv("NAVER_AD_SECRET_KEY", "")
             _naver_client_id = os.getenv("NAVER_CLIENT_ID", "")
             _naver_client_secret = os.getenv("NAVER_CLIENT_SECRET", "")
-            with st.spinner(f"통계 조회 중... (0/{len(_missing_stat_kws)})"):
-                _vol_data = naver_api.get_search_volumes_batch(_missing_stat_kws, _naver_cid, _naver_akey, _naver_skey)
-                _doc_data = naver_api.get_doc_counts_parallel(_missing_stat_kws, _naver_client_id, _naver_client_secret)
+            _update_targets = _missing_stat_kws if _missing_stat_kws else _hist_kws
+            with st.spinner(f"통계 조회 중... ({len(_update_targets)}개)"):
+                _vol_data = naver_api.get_search_volumes_batch(_update_targets, _naver_cid, _naver_akey, _naver_skey)
+                _doc_data = naver_api.get_doc_counts_parallel(_update_targets, _naver_client_id, _naver_client_secret)
             _updated = 0
-            for kw in _missing_stat_kws:
+            for kw in _update_targets:
                 vol = _vol_data.get(kw, {})
                 doc = _doc_data.get(kw, 0)
                 if vol:
@@ -843,9 +883,19 @@ else:
                     _, stars, _ = naver_api.competition_level(vol.get("total_search", 0), doc)
                     _hist[kw]["star_count"] = len(stars)
                     _updated += 1
+            if "__meta__" not in _hist:
+                _hist["__meta__"] = {}
+            _hist["__meta__"]["last_stat_update"] = datetime.now().strftime("%Y-%m-%d")
             _save_keywords_history(_hist)
             st.session_state.keywords_history = _hist
             st.success(f"✅ {_updated}개 키워드 통계 업데이트 완료!")
+            st.rerun()
+    with col_stat_reset:
+        if st.button("🔄", use_container_width=True, help="통계 갱신 타이머 초기화"):
+            if "__meta__" in _hist:
+                _hist["__meta__"].pop("last_stat_update", None)
+            _save_keywords_history(_hist)
+            st.session_state.keywords_history = _hist
             st.rerun()
     with col_sort:
         _sort_options = ["가나다순", "검색량 높은 순", "문서수 낮은 순", "모바일 클릭률 높은 순", "별점 높은 순"]
@@ -912,8 +962,11 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
                     with pc1:
                         st.checkbox("", key=f"hist_chk_{_pk}", label_visibility="collapsed")
                     with pc2:
+                        _pk_in_bl = _pk in _blacklist
                         if _pk_pub:
                             st.markdown(f'<p style="color:#999;margin:0;font-size:0.80em;">✅ {_pk}&nbsp;<span style="color:#4caf50;">발행됨</span>' + (f'&nbsp;<span style="color:#bbb;">{_pk_stat}</span>' if _pk_stat else "") + f'&nbsp;<span style="color:#555;font-size:0.80em;">({len(_pk_ch)})</span></p>', unsafe_allow_html=True)
+                        elif _pk_in_bl:
+                            st.markdown(f'<p style="color:#f44336;margin:0;font-size:0.84em;"><b>📁 {_pk}</b>' + (f'&nbsp;<span style="color:#ef9a9a;">{_pk_stat}</span>' if _pk_stat else "") + f'&nbsp;<span style="color:#e57373;font-size:0.80em;">({len(_pk_ch)}) ⚠️중복</span></p>', unsafe_allow_html=True)
                         else:
                             st.markdown(f'<p style="margin:0;font-size:0.84em;"><b>📁 {_pk}</b>' + (f'&nbsp;<span style="color:#888;">{_pk_stat}</span>' if _pk_stat else "") + f'&nbsp;<span style="color:#666;font-size:0.80em;">({len(_pk_ch)})</span></p>', unsafe_allow_html=True)
                     with pc3:
@@ -950,8 +1003,11 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
                             with cc1:
                                 st.checkbox("", key=f"hist_chk_{_ck}", label_visibility="collapsed")
                             with cc2:
+                                _ck_in_bl = _ck in _blacklist
                                 if _ck_pub:
                                     st.markdown(f'<p style="margin:0 0 0 10px;font-size:0.76em;color:#999;">└ ✅ {_ck}' + (f'&nbsp;<span style="color:#bbb;">{_ck_stat}</span>' if _ck_stat else "") + '</p>', unsafe_allow_html=True)
+                                elif _ck_in_bl:
+                                    st.markdown(f'<p style="margin:0 0 0 10px;font-size:0.76em;color:#f44336;">└ <b>{_ck}</b>' + (f'&nbsp;<span style="color:#ef9a9a;">{_ck_stat}</span>' if _ck_stat else "") + ' ⚠️중복</p>', unsafe_allow_html=True)
                                 else:
                                     st.markdown(f'<p style="margin:0 0 0 10px;font-size:0.76em;">└ <b>{_ck}</b>' + (f'&nbsp;<span style="color:#888;">{_ck_stat}</span>' if _ck_stat else "") + '</p>', unsafe_allow_html=True)
                             with cc3:
@@ -983,8 +1039,11 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
                         with ow1:
                             st.checkbox("", key=f"hist_chk_{_ow}", label_visibility="collapsed")
                         with ow2:
+                            _ow_in_bl = _ow in _blacklist
                             if _ow_pub:
                                 st.markdown(f'<p style="color:#999;margin:0;font-size:0.78em;">✅ {_ow}' + (f'&nbsp;<span style="color:#bbb;">{_ow_stat}</span>' if _ow_stat else "") + '</p>', unsafe_allow_html=True)
+                            elif _ow_in_bl:
+                                st.markdown(f'<p style="color:#f44336;margin:0;font-size:0.80em;"><b>{_ow}</b>' + (f'&nbsp;<span style="color:#ef9a9a;">{_ow_stat}</span>' if _ow_stat else "") + ' ⚠️중복</p>', unsafe_allow_html=True)
                             else:
                                 st.markdown(f'<p style="margin:0;font-size:0.80em;"><b>{_ow}</b>' + (f'&nbsp;<span style="color:#888;">{_ow_stat}</span>' if _ow_stat else "") + '</p>', unsafe_allow_html=True)
                         with ow3:
@@ -1026,6 +1085,37 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
                         _hist[exc_kw].pop("exclude_reason", None)
                         _save_keywords_history(_hist)
                         st.rerun()
+
+    # ── 블랙리스트 섹션 ──────────────────────────────────────
+    _bl_kws = sorted(_blacklist.keys())
+    if _bl_kws:
+        with st.expander(f"⬛ 블랙리스트 ({len(_bl_kws)}개) — 이미 발행한 키워드"):
+            bl_dl_col, bl_empty = st.columns([2, 8])
+            with bl_dl_col:
+                st.download_button(
+                    "💾 JSON 저장",
+                    data=json.dumps(_blacklist, ensure_ascii=False, indent=2),
+                    file_name=f"keywords_blacklist_{datetime.now().strftime('%Y%m%d')}.json",
+                    mime="application/json",
+                    use_container_width=True,
+                )
+            for _row_s in range(0, len(_bl_kws), 3):
+                _bl_row = _bl_kws[_row_s:_row_s + 3]
+                _bl_grid = st.columns(3)
+                for _j in range(3):
+                    with _bl_grid[_j]:
+                        if _j >= len(_bl_row):
+                            break
+                        _bk = _bl_row[_j]
+                        _bk_date = _blacklist[_bk].get("moved_at", "")
+                        bc1, bc2 = st.columns([5, 1])
+                        with bc1:
+                            st.markdown(f'<p style="margin:0;font-size:0.80em;">⬛ <b>{_bk}</b>' + (f'&nbsp;<span style="color:#666;font-size:0.76em;">{_bk_date}</span>' if _bk_date else "") + '</p>', unsafe_allow_html=True)
+                        with bc2:
+                            if st.button("✕", key=f"bl_del_{_bk}"):
+                                del _blacklist[_bk]
+                                _save_blacklist(_blacklist)
+                                st.rerun()
 
     selected_kws_for_gen = [kw for kw in _hist_kws if st.session_state.get(f"hist_chk_{kw}")]
     n_sel = len(selected_kws_for_gen)

@@ -807,7 +807,7 @@ st.divider()
 st.subheader("📋 키워드 히스토리")
 
 _hist = _load_keywords_history()
-_hist_kws = sorted([kw for kw, v in _hist.items() if not v.get("excluded", False)])
+_hist_kws = sorted([kw for kw, v in _hist.items() if kw != "__meta__" and not v.get("excluded", False)])
 
 if not _hist_kws:
     st.caption("키워드 히스토리가 없습니다. 위에서 황금 롱테일 키워드를 찾아주세요.")
@@ -825,18 +825,26 @@ else:
                 st.session_state[f"hist_chk_{kw}"] = False
             st.rerun()
     with col_stat:
+        _last_stat_update = _hist.get("__meta__", {}).get("last_stat_update")
+        _stat_days_left = 0
+        if _last_stat_update:
+            _stat_elapsed = (datetime.now() - datetime.strptime(_last_stat_update, "%Y-%m-%d")).days
+            _stat_days_left = max(0, 30 - _stat_elapsed)
         _missing_stat_kws = [kw for kw in _hist_kws if "total_search" not in _hist[kw] or "star_count" not in _hist[kw]]
-        if st.button(f"📊 통계 채우기 ({len(_missing_stat_kws)}개)", use_container_width=True, disabled=len(_missing_stat_kws) == 0):
+        _stat_btn_disabled = _stat_days_left > 0 and len(_missing_stat_kws) == 0
+        _stat_btn_label = f"📊 통계 채우기 ({len(_missing_stat_kws)}개)" if not _stat_days_left else f"📊 통계 갱신 ({_stat_days_left}일 후)"
+        if st.button(_stat_btn_label, use_container_width=True, disabled=_stat_btn_disabled):
             _naver_cid = os.getenv("NAVER_AD_CUSTOMER_ID", "")
             _naver_akey = os.getenv("NAVER_AD_API_KEY", "")
             _naver_skey = os.getenv("NAVER_AD_SECRET_KEY", "")
             _naver_client_id = os.getenv("NAVER_CLIENT_ID", "")
             _naver_client_secret = os.getenv("NAVER_CLIENT_SECRET", "")
-            with st.spinner(f"통계 조회 중... (0/{len(_missing_stat_kws)})"):
-                _vol_data = naver_api.get_search_volumes_batch(_missing_stat_kws, _naver_cid, _naver_akey, _naver_skey)
-                _doc_data = naver_api.get_doc_counts_parallel(_missing_stat_kws, _naver_client_id, _naver_client_secret)
+            _update_targets = _missing_stat_kws if _missing_stat_kws else _hist_kws
+            with st.spinner(f"통계 조회 중... ({len(_update_targets)}개)"):
+                _vol_data = naver_api.get_search_volumes_batch(_update_targets, _naver_cid, _naver_akey, _naver_skey)
+                _doc_data = naver_api.get_doc_counts_parallel(_update_targets, _naver_client_id, _naver_client_secret)
             _updated = 0
-            for kw in _missing_stat_kws:
+            for kw in _update_targets:
                 vol = _vol_data.get(kw, {})
                 doc = _doc_data.get(kw, 0)
                 if vol:
@@ -846,6 +854,9 @@ else:
                     _, stars, _ = naver_api.competition_level(vol.get("total_search", 0), doc)
                     _hist[kw]["star_count"] = len(stars)
                     _updated += 1
+            if "__meta__" not in _hist:
+                _hist["__meta__"] = {}
+            _hist["__meta__"]["last_stat_update"] = datetime.now().strftime("%Y-%m-%d")
             _save_keywords_history(_hist)
             st.session_state.keywords_history = _hist
             st.success(f"✅ {_updated}개 키워드 통계 업데이트 완료!")

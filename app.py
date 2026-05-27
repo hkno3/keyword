@@ -765,6 +765,8 @@ def _build_parent_groups(hist_kws: list, hist: dict):
             groups.setdefault(p, []).append(kw)
             has_parent.add(kw)
     no_parent_kws = [kw for kw in hist_kws if kw not in has_parent]
+    # 자동 감지: 먼저 parent_map 전체 계산
+    parent_map = {}
     for child in no_parent_kws:
         best = None
         for cand in no_parent_kws:
@@ -772,7 +774,12 @@ def _build_parent_groups(hist_kws: list, hist: dict):
                 if best is None or len(cand) > len(best):
                     best = cand
         if best:
-            groups.setdefault(best, []).append(child)
+            parent_map[child] = best
+    # 자기 자신이 다른 키워드의 부모인 경우 자식으로 등록하지 않음 (중복 key 방지)
+    auto_parents = set(parent_map.values())
+    for child, parent in parent_map.items():
+        if child not in auto_parents:
+            groups.setdefault(parent, []).append(child)
             has_parent.add(child)
     orphans = [kw for kw in hist_kws if kw not in has_parent and kw not in groups]
     return groups, orphans

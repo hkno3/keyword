@@ -878,7 +878,7 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
 </style>""", unsafe_allow_html=True)
     _groups, _orphans = _build_parent_groups(_hist_kws, _hist)
     _parent_cands = sorted(set(list(_groups.keys()) + [k for k in _hist_kws if _hist[k].get("is_parent")]))
-    with st.container(height=300):
+    with st.container(height=600):
         for _pk in sorted(_groups.keys()):
             _pk_ch = sorted(_groups[_pk])
             _pk_pub = _hist[_pk].get("published", False)

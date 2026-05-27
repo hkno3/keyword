@@ -813,7 +813,7 @@ if not _hist_kws:
     st.caption("키워드 히스토리가 없습니다. 위에서 황금 롱테일 키워드를 찾아주세요.")
 else:
     st.caption(f"총 {len(_hist_kws)}개 황금 롱테일 키워드 (모바일 클릭률 2% 이상)")
-    col_selall, col_desel, col_stat, col_sort = st.columns([2, 2, 2, 4])
+    col_selall, col_desel, col_stat, col_stat_reset, col_sort = st.columns([2, 2, 3, 1, 4])
     with col_selall:
         if st.button("전체 선택", use_container_width=True):
             for kw in _hist_kws:
@@ -860,6 +860,13 @@ else:
             _save_keywords_history(_hist)
             st.session_state.keywords_history = _hist
             st.success(f"✅ {_updated}개 키워드 통계 업데이트 완료!")
+            st.rerun()
+    with col_stat_reset:
+        if st.button("🔄", use_container_width=True, help="통계 갱신 타이머 초기화"):
+            if "__meta__" in _hist:
+                _hist["__meta__"].pop("last_stat_update", None)
+            _save_keywords_history(_hist)
+            st.session_state.keywords_history = _hist
             st.rerun()
     with col_sort:
         _sort_options = ["가나다순", "검색량 높은 순", "문서수 낮은 순", "모바일 클릭률 높은 순", "별점 높은 순"]

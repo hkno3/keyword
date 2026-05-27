@@ -132,6 +132,10 @@ def _save_keywords_to_history(rows: list):
                     entry["mobile_ctr"] = row["mobile_ctr"]
                 if "stars" in row:
                     entry["star_count"] = len(row["stars"])
+                if row.get("is_parent"):
+                    entry["is_parent"] = True
+                if row.get("parent_keyword"):
+                    entry["parent_keyword"] = row["parent_keyword"]
             history[kw] = entry
             seen.add(kw)
             added += 1
@@ -669,10 +673,21 @@ if start_btn:
             st.warning(f"기사를 다 돌았어요. {len(collected)}개 수집됨.")
 
         if collected:
+            # 부모(황금키워드) 먼저 히스토리 저장
+            _save_keywords_to_history([{**r, "is_parent": True} for r in collected])
+
             _run_longtail([r["keyword"] for r in collected])
             if st.session_state.get("longtail_table"):
-                kws = [r for r in st.session_state.longtail_table if r.get("mobile_ctr", 0) >= 2]
-                added = _save_keywords_to_history(kws)
+                parent_kw_list = [r["keyword"] for r in collected]
+                child_rows = []
+                for r in st.session_state.longtail_table:
+                    if r.get("mobile_ctr", 0) >= 2:
+                        child_row = dict(r)
+                        matched = next((p for p in parent_kw_list if r["keyword"].startswith(p)), None)
+                        if matched:
+                            child_row["parent_keyword"] = matched
+                        child_rows.append(child_row)
+                added = _save_keywords_to_history(child_rows)
                 st.success(f"✅ 모바일 클릭률 2% 이상 키워드 {added}개 히스토리에 저장됐습니다.")
         st.rerun()
 
@@ -828,7 +843,7 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
                         break
                     kw = row_kws[j]
                     is_pub = _hist[kw].get("published", False)
-                    c_chk, c_kw, c_pub, c_del = st.columns([1, 6, 1, 1])
+                    c_chk, c_kw, c_exp, c_pub, c_del = st.columns([1, 5, 1, 1, 1])
                     with c_chk:
                         st.checkbox("", key=f"hist_chk_{kw}", label_visibility="collapsed")
                     with c_pub:
@@ -836,6 +851,17 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
                         if pub_toggled != is_pub:
                             _hist[kw]["published"] = pub_toggled
                             _save_keywords_history(_hist)
+                            st.rerun()
+                    with c_exp:
+                        is_expanded = st.session_state.get(f"hist_expand_{kw}", False)
+                        if st.button("▼" if is_expanded else "↓", key=f"hist_exp_{kw}"):
+                            if is_expanded:
+                                st.session_state[f"hist_expand_{kw}"] = False
+                                st.session_state.pop(f"hist_children_{kw}", None)
+                            else:
+                                st.session_state[f"hist_expand_{kw}"] = True
+                                ac = naver_api.get_autocomplete(kw)
+                                st.session_state[f"hist_children_{kw}"] = [c for c in ac if c in _hist and c != kw]
                             st.rerun()
                     with c_kw:
                         date_str = _hist[kw].get("first_found", "")
@@ -873,6 +899,29 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
                             _hist[kw]["exclude_reason"] = "published" if _hist[kw].get("published") else "deleted"
                             _save_keywords_history(_hist)
                             st.rerun()
+                    # 자식 키워드 펼침
+                    if st.session_state.get(f"hist_expand_{kw}", False):
+                        children = st.session_state.get(f"hist_children_{kw}", [])
+                        if children:
+                            for child_kw in children:
+                                cd = _hist[child_kw]
+                                cd_ts = cd.get("total_search", "")
+                                cd_dc = cd.get("doc_count", "")
+                                cd_ctr = cd.get("mobile_ctr", "")
+                                cd_ctr_s = f"{cd_ctr:.2f}" if cd_ctr != "" else ""
+                                cd_sc = cd.get("star_count", "")
+                                cd_star_s = f"⭐{cd_sc}" if cd_sc != "" else ""
+                                cd_stat = "|".join(p for p in [str(cd_ts), str(cd_dc), cd_ctr_s, cd_star_s] if p) if cd_ts != "" else ""
+                                cd_color = "#999" if cd.get("published") else "#444"
+                                st.markdown(
+                                    f'<p style="margin:1px 0 1px 6px;font-size:0.76em;color:{cd_color};">'
+                                    f'└ <b>{child_kw}</b>'
+                                    + (f'&nbsp;<span style="color:#aaa;">{cd_stat}</span>' if cd_stat else "")
+                                    + '</p>',
+                                    unsafe_allow_html=True,
+                                )
+                        else:
+                            st.markdown('<p style="margin:2px 0 0 6px;font-size:0.74em;color:#bbb;">자식 키워드 없음</p>', unsafe_allow_html=True)
 
     _excluded_kws = sorted([kw for kw, v in _hist.items() if v.get("excluded", False)])
     if _excluded_kws:

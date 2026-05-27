@@ -879,8 +879,17 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
     _groups, _orphans = _build_parent_groups(_hist_kws, _hist)
     _parent_cands = sorted(set(list(_groups.keys()) + [k for k in _hist_kws if _hist[k].get("is_parent")]))
     with st.container(height=600):
-        # 부모 그룹 — 3열 그리드
-        _pk_list = sorted(_groups.keys())
+        # 부모 그룹 — 정렬 적용 후 3열 그리드
+        if _sort_by == "검색량 높은 순":
+            _pk_list = sorted(_groups.keys(), key=lambda k: _hist[k].get("total_search", 0), reverse=True)
+        elif _sort_by == "문서수 낮은 순":
+            _pk_list = sorted(_groups.keys(), key=lambda k: _hist[k].get("doc_count", 9999999))
+        elif _sort_by == "모바일 클릭률 높은 순":
+            _pk_list = sorted(_groups.keys(), key=lambda k: _hist[k].get("mobile_ctr", 0), reverse=True)
+        elif _sort_by == "별점 높은 순":
+            _pk_list = sorted(_groups.keys(), key=lambda k: _hist[k].get("star_count", 0), reverse=True)
+        else:
+            _pk_list = sorted(_groups.keys())
         for _row_s in range(0, len(_pk_list), 3):
             _row_pks = _pk_list[_row_s:_row_s + 3]
             _grid = st.columns(3)
@@ -898,7 +907,8 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
                     _pk_sc = _hist[_pk].get("star_count", "")
                     _pk_star_s = f"⭐{_pk_sc}" if _pk_sc != "" else ""
                     _pk_stat = "|".join(s for s in [str(_pk_ts), str(_pk_dc), _pk_ctr_s, _pk_star_s] if s) if _pk_ts != "" else ""
-                    pc1, pc2, pc3, pc4 = st.columns([1, 6, 1, 1])
+                    _pk_exp = st.session_state.get(f"hist_grp_exp_{_pk}", False)
+                    pc1, pc2, pc3, pc4, pc5 = st.columns([1, 5, 1, 1, 1])
                     with pc1:
                         st.checkbox("", key=f"hist_chk_{_pk}", label_visibility="collapsed")
                     with pc2:
@@ -907,12 +917,16 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
                         else:
                             st.markdown(f'<p style="margin:0;font-size:0.84em;"><b>📁 {_pk}</b>' + (f'&nbsp;<span style="color:#888;">{_pk_stat}</span>' if _pk_stat else "") + f'&nbsp;<span style="color:#666;font-size:0.80em;">({len(_pk_ch)})</span></p>', unsafe_allow_html=True)
                     with pc3:
+                        if st.button("▼" if _pk_exp else "↓", key=f"hist_grp_exp_{_pk}"):
+                            st.session_state[f"hist_grp_exp_{_pk}"] = not _pk_exp
+                            st.rerun()
+                    with pc4:
                         _pk_pub_t = st.checkbox("", key=f"hist_pub_{_pk}", value=_pk_pub, label_visibility="collapsed", help="수동 발행")
                         if _pk_pub_t != _pk_pub:
                             _hist[_pk]["published"] = _pk_pub_t
                             _save_keywords_history(_hist)
                             st.rerun()
-                    with pc4:
+                    with pc5:
                         if st.button("✕", key=f"hist_del_{_pk}"):
                             today = datetime.now().strftime("%Y-%m-%d")
                             _hist[_pk]["excluded"] = True
@@ -920,31 +934,32 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
                             _hist[_pk]["exclude_reason"] = "published" if _hist[_pk].get("published") else "deleted"
                             _save_keywords_history(_hist)
                             st.rerun()
-                    for _ck in _pk_ch:
-                        if _ck not in _hist:
-                            continue
-                        _ck_pub = _hist[_ck].get("published", False)
-                        _ck_ts = _hist[_ck].get("total_search", "")
-                        _ck_dc = _hist[_ck].get("doc_count", "")
-                        _ck_ctr = _hist[_ck].get("mobile_ctr", "")
-                        _ck_ctr_s = f"{_ck_ctr:.2f}" if _ck_ctr != "" else ""
-                        _ck_sc = _hist[_ck].get("star_count", "")
-                        _ck_star_s = f"⭐{_ck_sc}" if _ck_sc != "" else ""
-                        _ck_stat = "|".join(s for s in [str(_ck_ts), str(_ck_dc), _ck_ctr_s, _ck_star_s] if s) if _ck_ts != "" else ""
-                        cc1, cc2, cc3 = st.columns([1, 7, 1])
-                        with cc1:
-                            st.checkbox("", key=f"hist_chk_{_ck}", label_visibility="collapsed")
-                        with cc2:
-                            if _ck_pub:
-                                st.markdown(f'<p style="margin:0 0 0 10px;font-size:0.76em;color:#999;">└ ✅ {_ck}' + (f'&nbsp;<span style="color:#bbb;">{_ck_stat}</span>' if _ck_stat else "") + '</p>', unsafe_allow_html=True)
-                            else:
-                                st.markdown(f'<p style="margin:0 0 0 10px;font-size:0.76em;">└ <b>{_ck}</b>' + (f'&nbsp;<span style="color:#888;">{_ck_stat}</span>' if _ck_stat else "") + '</p>', unsafe_allow_html=True)
-                        with cc3:
-                            _ck_pub_t = st.checkbox("", key=f"hist_pub_{_ck}", value=_ck_pub, label_visibility="collapsed", help="수동 발행")
-                            if _ck_pub_t != _ck_pub:
-                                _hist[_ck]["published"] = _ck_pub_t
-                                _save_keywords_history(_hist)
-                                st.rerun()
+                    if _pk_exp:
+                        for _ck in _pk_ch:
+                            if _ck not in _hist:
+                                continue
+                            _ck_pub = _hist[_ck].get("published", False)
+                            _ck_ts = _hist[_ck].get("total_search", "")
+                            _ck_dc = _hist[_ck].get("doc_count", "")
+                            _ck_ctr = _hist[_ck].get("mobile_ctr", "")
+                            _ck_ctr_s = f"{_ck_ctr:.2f}" if _ck_ctr != "" else ""
+                            _ck_sc = _hist[_ck].get("star_count", "")
+                            _ck_star_s = f"⭐{_ck_sc}" if _ck_sc != "" else ""
+                            _ck_stat = "|".join(s for s in [str(_ck_ts), str(_ck_dc), _ck_ctr_s, _ck_star_s] if s) if _ck_ts != "" else ""
+                            cc1, cc2, cc3 = st.columns([1, 7, 1])
+                            with cc1:
+                                st.checkbox("", key=f"hist_chk_{_ck}", label_visibility="collapsed")
+                            with cc2:
+                                if _ck_pub:
+                                    st.markdown(f'<p style="margin:0 0 0 10px;font-size:0.76em;color:#999;">└ ✅ {_ck}' + (f'&nbsp;<span style="color:#bbb;">{_ck_stat}</span>' if _ck_stat else "") + '</p>', unsafe_allow_html=True)
+                                else:
+                                    st.markdown(f'<p style="margin:0 0 0 10px;font-size:0.76em;">└ <b>{_ck}</b>' + (f'&nbsp;<span style="color:#888;">{_ck_stat}</span>' if _ck_stat else "") + '</p>', unsafe_allow_html=True)
+                            with cc3:
+                                _ck_pub_t = st.checkbox("", key=f"hist_pub_{_ck}", value=_ck_pub, label_visibility="collapsed", help="수동 발행")
+                                if _ck_pub_t != _ck_pub:
+                                    _hist[_ck]["published"] = _ck_pub_t
+                                    _save_keywords_history(_hist)
+                                    st.rerun()
         # 부모 없는 키워드 — 3열 그리드
         if _orphans:
             st.markdown(f"<p style='margin:8px 0 4px;font-size:0.8em;color:#888;border-top:1px solid #333;padding-top:8px;'>부모 없는 키워드 ({len(_orphans)}개)</p>", unsafe_allow_html=True)

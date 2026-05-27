@@ -840,7 +840,7 @@ if not _hist_kws:
     st.caption("키워드 히스토리가 없습니다. 위에서 황금 롱테일 키워드를 찾아주세요.")
 else:
     st.caption(f"총 {len(_hist_kws)}개 황금 롱테일 키워드 (모바일 클릭률 2% 이상)")
-    col_selall, col_desel, col_stat, col_stat_reset, col_sort = st.columns([2, 2, 3, 1, 4])
+    col_selall, col_desel, col_stat, col_stat_reset, col_sort, col_expand = st.columns([2, 2, 3, 1, 4, 2])
     with col_selall:
         if st.button("전체 선택", use_container_width=True):
             for kw in _hist_kws:
@@ -898,6 +898,14 @@ else:
     with col_sort:
         _sort_options = ["가나다순", "검색량 높은 순", "문서수 낮은 순", "모바일 클릭률 높은 순", "별점 높은 순"]
         _sort_by = st.selectbox("정렬", _sort_options, label_visibility="collapsed", key="hist_sort")
+    with col_expand:
+        _all_exp = st.session_state.get("hist_all_expand", False)
+        if st.button("📂 모두 접기" if _all_exp else "📂 모두 펼치기", use_container_width=True):
+            _new_exp = not _all_exp
+            st.session_state["hist_all_expand"] = _new_exp
+            for _k in _hist_kws:
+                st.session_state[f"hist_grp_exp_{_k}"] = _new_exp
+            st.rerun()
 
     if _sort_by == "검색량 높은 순":
         _hist_kws = sorted(_hist_kws, key=lambda k: _hist[k].get("total_search", 0), reverse=True)

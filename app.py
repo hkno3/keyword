@@ -20,6 +20,7 @@ load_dotenv()
 
 CRAWLED_FILE = os.path.join(os.path.dirname(__file__), "crawled_links.json")
 KEYWORDS_HISTORY_FILE = os.path.join(os.path.dirname(__file__), "keywords_history.json")
+KEYWORDS_BLACKLIST_FILE = os.path.join(os.path.dirname(__file__), "keywords_blacklist.json")
 GROQ_USAGE_FILE = os.path.join(os.path.dirname(__file__), "groq_usage.json")
 GEMINI_USAGE_FILE = os.path.join(os.path.dirname(__file__), "gemini_usage.json")
 WP_SITES_FILE = os.path.join(os.path.dirname(__file__), "wp_sites.json")
@@ -96,6 +97,17 @@ def _add_gemini_call():
     st.session_state.gemini_calls = st.session_state.get("gemini_calls", 0) + 1
     with open(GEMINI_USAGE_FILE, "w", encoding="utf-8") as f:
         json.dump({"date": today, "calls": st.session_state.gemini_calls}, f)
+
+def _load_blacklist() -> dict:
+    try:
+        with open(KEYWORDS_BLACKLIST_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def _save_blacklist(bl: dict):
+    with open(KEYWORDS_BLACKLIST_FILE, "w", encoding="utf-8") as f:
+        json.dump(bl, f, ensure_ascii=False, indent=2)
 
 def _load_keywords_history() -> dict:
     try:
@@ -252,6 +264,22 @@ with st.sidebar:
         if os.path.exists(KEYWORDS_HISTORY_FILE):
             os.remove(KEYWORDS_HISTORY_FILE)
         st.session_state.keywords_history = {}
+        st.rerun()
+    if st.button("⬛ 발행됨 → 블랙리스트로 보내기", use_container_width=True):
+        _bl = _load_blacklist()
+        _h = _load_keywords_history()
+        _moved = 0
+        for kw, val in list(_h.items()):
+            if kw == "__meta__":
+                continue
+            if val.get("published"):
+                _bl[kw] = {"moved_at": datetime.now().strftime("%Y-%m-%d")}
+                del _h[kw]
+                _moved += 1
+        _save_blacklist(_bl)
+        _save_keywords_history(_h)
+        st.session_state.keywords_history = _h
+        st.success(f"✅ {_moved}개 블랙리스트로 이동")
         st.rerun()
     st.divider()
     st.markdown("**🗺️ 사이트맵**")
@@ -807,6 +835,7 @@ st.divider()
 st.subheader("📋 키워드 히스토리")
 
 _hist = _load_keywords_history()
+_blacklist = _load_blacklist()
 _hist_kws = sorted([kw for kw, v in _hist.items() if kw != "__meta__" and not v.get("excluded", False)])
 
 if not _hist_kws:
@@ -933,8 +962,11 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
                     with pc1:
                         st.checkbox("", key=f"hist_chk_{_pk}", label_visibility="collapsed")
                     with pc2:
+                        _pk_in_bl = _pk in _blacklist
                         if _pk_pub:
                             st.markdown(f'<p style="color:#999;margin:0;font-size:0.80em;">✅ {_pk}&nbsp;<span style="color:#4caf50;">발행됨</span>' + (f'&nbsp;<span style="color:#bbb;">{_pk_stat}</span>' if _pk_stat else "") + f'&nbsp;<span style="color:#555;font-size:0.80em;">({len(_pk_ch)})</span></p>', unsafe_allow_html=True)
+                        elif _pk_in_bl:
+                            st.markdown(f'<p style="color:#f44336;margin:0;font-size:0.84em;"><b>📁 {_pk}</b>' + (f'&nbsp;<span style="color:#ef9a9a;">{_pk_stat}</span>' if _pk_stat else "") + f'&nbsp;<span style="color:#e57373;font-size:0.80em;">({len(_pk_ch)}) ⚠️중복</span></p>', unsafe_allow_html=True)
                         else:
                             st.markdown(f'<p style="margin:0;font-size:0.84em;"><b>📁 {_pk}</b>' + (f'&nbsp;<span style="color:#888;">{_pk_stat}</span>' if _pk_stat else "") + f'&nbsp;<span style="color:#666;font-size:0.80em;">({len(_pk_ch)})</span></p>', unsafe_allow_html=True)
                     with pc3:
@@ -971,8 +1003,11 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
                             with cc1:
                                 st.checkbox("", key=f"hist_chk_{_ck}", label_visibility="collapsed")
                             with cc2:
+                                _ck_in_bl = _ck in _blacklist
                                 if _ck_pub:
                                     st.markdown(f'<p style="margin:0 0 0 10px;font-size:0.76em;color:#999;">└ ✅ {_ck}' + (f'&nbsp;<span style="color:#bbb;">{_ck_stat}</span>' if _ck_stat else "") + '</p>', unsafe_allow_html=True)
+                                elif _ck_in_bl:
+                                    st.markdown(f'<p style="margin:0 0 0 10px;font-size:0.76em;color:#f44336;">└ <b>{_ck}</b>' + (f'&nbsp;<span style="color:#ef9a9a;">{_ck_stat}</span>' if _ck_stat else "") + ' ⚠️중복</p>', unsafe_allow_html=True)
                                 else:
                                     st.markdown(f'<p style="margin:0 0 0 10px;font-size:0.76em;">└ <b>{_ck}</b>' + (f'&nbsp;<span style="color:#888;">{_ck_stat}</span>' if _ck_stat else "") + '</p>', unsafe_allow_html=True)
                             with cc3:
@@ -1004,8 +1039,11 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
                         with ow1:
                             st.checkbox("", key=f"hist_chk_{_ow}", label_visibility="collapsed")
                         with ow2:
+                            _ow_in_bl = _ow in _blacklist
                             if _ow_pub:
                                 st.markdown(f'<p style="color:#999;margin:0;font-size:0.78em;">✅ {_ow}' + (f'&nbsp;<span style="color:#bbb;">{_ow_stat}</span>' if _ow_stat else "") + '</p>', unsafe_allow_html=True)
+                            elif _ow_in_bl:
+                                st.markdown(f'<p style="color:#f44336;margin:0;font-size:0.80em;"><b>{_ow}</b>' + (f'&nbsp;<span style="color:#ef9a9a;">{_ow_stat}</span>' if _ow_stat else "") + ' ⚠️중복</p>', unsafe_allow_html=True)
                             else:
                                 st.markdown(f'<p style="margin:0;font-size:0.80em;"><b>{_ow}</b>' + (f'&nbsp;<span style="color:#888;">{_ow_stat}</span>' if _ow_stat else "") + '</p>', unsafe_allow_html=True)
                         with ow3:
@@ -1047,6 +1085,37 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
                         _hist[exc_kw].pop("exclude_reason", None)
                         _save_keywords_history(_hist)
                         st.rerun()
+
+    # ── 블랙리스트 섹션 ──────────────────────────────────────
+    _bl_kws = sorted(_blacklist.keys())
+    if _bl_kws:
+        with st.expander(f"⬛ 블랙리스트 ({len(_bl_kws)}개) — 이미 발행한 키워드"):
+            bl_dl_col, bl_empty = st.columns([2, 8])
+            with bl_dl_col:
+                st.download_button(
+                    "💾 JSON 저장",
+                    data=json.dumps(_blacklist, ensure_ascii=False, indent=2),
+                    file_name=f"keywords_blacklist_{datetime.now().strftime('%Y%m%d')}.json",
+                    mime="application/json",
+                    use_container_width=True,
+                )
+            for _row_s in range(0, len(_bl_kws), 3):
+                _bl_row = _bl_kws[_row_s:_row_s + 3]
+                _bl_grid = st.columns(3)
+                for _j in range(3):
+                    with _bl_grid[_j]:
+                        if _j >= len(_bl_row):
+                            break
+                        _bk = _bl_row[_j]
+                        _bk_date = _blacklist[_bk].get("moved_at", "")
+                        bc1, bc2 = st.columns([5, 1])
+                        with bc1:
+                            st.markdown(f'<p style="margin:0;font-size:0.80em;">⬛ <b>{_bk}</b>' + (f'&nbsp;<span style="color:#666;font-size:0.76em;">{_bk_date}</span>' if _bk_date else "") + '</p>', unsafe_allow_html=True)
+                        with bc2:
+                            if st.button("✕", key=f"bl_del_{_bk}"):
+                                del _blacklist[_bk]
+                                _save_blacklist(_blacklist)
+                                st.rerun()
 
     selected_kws_for_gen = [kw for kw in _hist_kws if st.session_state.get(f"hist_chk_{kw}")]
     n_sel = len(selected_kws_for_gen)

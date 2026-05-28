@@ -590,7 +590,8 @@ if start_btn:
         articles = st.session_state[f"news_{auto_category}"]
         crawled_links = _load_crawled_links()
         collected = list(st.session_state.auto_keywords)
-        collected_kws = {r["keyword"] for r in collected}
+        _existing_kws = set(_load_keywords_history().keys()) | set(_load_blacklist().keys())
+        collected_kws = {r["keyword"] for r in collected} | _existing_kws
 
         status_box = st.empty()
         progress = st.progress(0)

@@ -21,6 +21,7 @@ load_dotenv()
 CRAWLED_FILE = os.path.join(os.path.dirname(__file__), "crawled_links.json")
 KEYWORDS_HISTORY_FILE = os.path.join(os.path.dirname(__file__), "keywords_history.json")
 KEYWORDS_BLACKLIST_FILE = os.path.join(os.path.dirname(__file__), "keywords_blacklist.json")
+MEMO_FILE = os.path.join(os.path.dirname(__file__), "memo.txt")
 GROQ_USAGE_FILE = os.path.join(os.path.dirname(__file__), "groq_usage.json")
 GEMINI_USAGE_FILE = os.path.join(os.path.dirname(__file__), "gemini_usage.json")
 WP_SITES_FILE = os.path.join(os.path.dirname(__file__), "wp_sites.json")
@@ -233,6 +234,17 @@ with st.sidebar:
     st.markdown("**🔍 네이버 API 호출 (이번 세션)**")
     st.caption(f"검색광고: {st.session_state.get('naver_ad_calls', 0):,}회")
     st.caption(f"검색(문서수): {st.session_state.get('naver_search_calls', 0):,}회")
+    st.divider()
+    st.markdown("**📝 메모장**")
+    try:
+        with open(MEMO_FILE, "r", encoding="utf-8") as _mf:
+            _memo_saved = _mf.read()
+    except Exception:
+        _memo_saved = ""
+    _memo = st.text_area("메모", value=_memo_saved, height=150, label_visibility="collapsed", key="sidebar_memo", placeholder="여기에 메모하세요...")
+    if _memo != _memo_saved:
+        with open(MEMO_FILE, "w", encoding="utf-8") as _mf:
+            _mf.write(_memo)
     st.divider()
     history = _load_keywords_history()
     st.caption(f"키워드 히스토리: {len(history)}개 키워드")

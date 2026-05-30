@@ -22,6 +22,7 @@ CRAWLED_FILE = os.path.join(os.path.dirname(__file__), "crawled_links.json")
 KEYWORDS_HISTORY_FILE = os.path.join(os.path.dirname(__file__), "keywords_history.json")
 KEYWORDS_BLACKLIST_FILE = os.path.join(os.path.dirname(__file__), "keywords_blacklist.json")
 MEMO_FILE = os.path.join(os.path.dirname(__file__), "memo.txt")
+PAGE_VIEWS_FILE = os.path.join(os.path.dirname(__file__), "page_views.json")
 GROQ_USAGE_FILE = os.path.join(os.path.dirname(__file__), "groq_usage.json")
 GEMINI_USAGE_FILE = os.path.join(os.path.dirname(__file__), "gemini_usage.json")
 WP_SITES_FILE = os.path.join(os.path.dirname(__file__), "wp_sites.json")
@@ -109,6 +110,26 @@ def _load_blacklist() -> dict:
 def _save_blacklist(bl: dict):
     with open(KEYWORDS_BLACKLIST_FILE, "w", encoding="utf-8") as f:
         json.dump(bl, f, ensure_ascii=False, indent=2)
+
+def _load_page_views() -> dict:
+    try:
+        with open(PAGE_VIEWS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def _get_view_str(kw: str, views: dict) -> str:
+    v = views.get(kw)
+    if not v:
+        return ""
+    baw = v.get("baw", 0)
+    biz = v.get("biz", 0)
+    parts = []
+    if baw:
+        parts.append(f"baw:{baw}")
+    if biz:
+        parts.append(f"biz:{biz}")
+    return " ".join(parts)
 
 def _load_keywords_history() -> dict:
     try:
@@ -847,13 +868,31 @@ st.subheader("📋 키워드 히스토리")
 
 _hist = _load_keywords_history()
 _blacklist = _load_blacklist()
+_page_views = _load_page_views()
 _hist_kws = sorted([kw for kw, v in _hist.items() if kw != "__meta__" and not v.get("excluded", False)])
 
 if not _hist_kws:
     st.caption("키워드 히스토리가 없습니다. 위에서 황금 롱테일 키워드를 찾아주세요.")
 else:
     st.caption(f"총 {len(_hist_kws)}개 황금 롱테일 키워드 (모바일 클릭률 2% 이상)")
-    col_selall, col_desel, col_stat, col_stat_reset, col_sort, col_expand = st.columns([2, 2, 3, 1, 4, 2])
+    # ── 조회수 TOP 5 ──────────────────────────────────────
+    _top5_data = []
+    for _kw in _hist_kws:
+        _vs = _get_view_str(_kw, _page_views)
+        if _vs:
+            _total = sum(_page_views.get(_kw, {}).get(s, 0) for s in ("baw", "biz"))
+            _ts = _hist[_kw].get("total_search", "")
+            _dc = _hist[_kw].get("doc_count", "")
+            _ctr = _hist[_kw].get("mobile_ctr", "")
+            _sc = _hist[_kw].get("star_count", "")
+            _stat = "|".join(s for s in [str(_ts), str(_dc), f"{_ctr:.2f}" if _ctr != "" else "", f"⭐{_sc}" if _sc != "" else ""] if s)
+            _top5_data.append((_kw, _total, _stat, _vs))
+    if _top5_data:
+        _top5_data.sort(key=lambda x: x[1], reverse=True)
+        with st.expander(f"👁 조회수 TOP 5", expanded=True):
+            for _rank, (_kw, _total, _stat, _vs) in enumerate(_top5_data[:5], 1):
+                st.markdown(f'<p style="margin:2px 0;font-size:0.82em;"><b>{_rank}. {_kw}</b>&nbsp;<span style="color:#888;">{_stat}</span>&nbsp;<span style="color:#4fc3f7;">{_vs}</span></p>', unsafe_allow_html=True)
+    col_selall, col_desel, col_stat, col_stat_reset, col_views, col_sort, col_expand = st.columns([2, 2, 3, 1, 3, 4, 2])
     with col_selall:
         if st.button("전체 선택", use_container_width=True):
             for kw in _hist_kws:
@@ -907,6 +946,28 @@ else:
                 _hist["__meta__"].pop("last_stat_update", None)
             _save_keywords_history(_hist)
             st.session_state.keywords_history = _hist
+            st.rerun()
+    with col_views:
+        if st.button("👁 조회수 가져오기", use_container_width=True):
+            _wp_sites = _load_wp_sites()
+            _site_keys = {"bodyandwell": "baw", "bizachieve": "biz"}
+            _views = _load_page_views()
+            _updated = 0
+            for _ws in _wp_sites:
+                _sk = next((v for k, v in _site_keys.items() if k in _ws.get("url", "").lower() or k in _ws.get("name", "").lower()), None)
+                if not _sk:
+                    continue
+                with st.spinner(f"{_ws.get('name','사이트')} 조회수 가져오는 중..."):
+                    _fetched = wp_service.fetch_post_views(_ws, _sk, _hist_kws)
+                for _kw, _cnt in _fetched.items():
+                    if _kw not in _views:
+                        _views[_kw] = {"baw": 0, "biz": 0, "last_updated": ""}
+                    _views[_kw][_sk] = _cnt
+                    _views[_kw]["last_updated"] = datetime.now().strftime("%Y-%m-%d")
+                    _updated += 1
+            with open(PAGE_VIEWS_FILE, "w", encoding="utf-8") as _pvf:
+                json.dump(_views, _pvf, ensure_ascii=False, indent=2)
+            st.success(f"✅ {_updated}개 키워드 조회수 업데이트!")
             st.rerun()
     with col_sort:
         _sort_options = ["가나다순", "검색량 높은 순", "문서수 낮은 순", "모바일 클릭률 높은 순", "별점 높은 순"]
@@ -975,7 +1036,10 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
                     _pk_ctr_s = f"{_pk_ctr:.2f}" if _pk_ctr != "" else ""
                     _pk_sc = _hist[_pk].get("star_count", "")
                     _pk_star_s = f"⭐{_pk_sc}" if _pk_sc != "" else ""
+                    _pk_vs = _get_view_str(_pk, _page_views)
                     _pk_stat = "|".join(s for s in [str(_pk_ts), str(_pk_dc), _pk_ctr_s, _pk_star_s] if s) if _pk_ts != "" else ""
+                    if _pk_vs:
+                        _pk_stat = (_pk_stat + "|" if _pk_stat else "") + _pk_vs
                     _pk_exp = st.session_state.get(f"hist_grp_exp_{_pk}", False)
                     pc1, pc2, pc3, pc4, pc5 = st.columns([1, 5, 1, 1, 1])
                     with pc1:
@@ -1017,7 +1081,10 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
                             _ck_ctr_s = f"{_ck_ctr:.2f}" if _ck_ctr != "" else ""
                             _ck_sc = _hist[_ck].get("star_count", "")
                             _ck_star_s = f"⭐{_ck_sc}" if _ck_sc != "" else ""
+                            _ck_vs = _get_view_str(_ck, _page_views)
                             _ck_stat = "|".join(s for s in [str(_ck_ts), str(_ck_dc), _ck_ctr_s, _ck_star_s] if s) if _ck_ts != "" else ""
+                            if _ck_vs:
+                                _ck_stat = (_ck_stat + "|" if _ck_stat else "") + _ck_vs
                             cc1, cc2, cc3 = st.columns([1, 7, 1])
                             with cc1:
                                 st.checkbox("", key=f"hist_chk_{_ck}", label_visibility="collapsed")

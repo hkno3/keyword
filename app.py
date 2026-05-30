@@ -967,7 +967,7 @@ else:
                     _updated += 1
             with open(PAGE_VIEWS_FILE, "w", encoding="utf-8") as _pvf:
                 json.dump(_views, _pvf, ensure_ascii=False, indent=2)
-            st.success(f"✅ {_updated}개 키워드 조회수 업데이트!")
+            st.toast(f"✅ {_updated}개 키워드 조회수 업데이트!")
             st.rerun()
     with col_sort:
         _sort_options = ["가나다순", "검색량 높은 순", "문서수 낮은 순", "모바일 클릭률 높은 순", "별점 높은 순"]

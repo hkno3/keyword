@@ -892,7 +892,7 @@ else:
         with st.expander(f"👁 조회수 TOP 5", expanded=True):
             for _rank, (_kw, _total, _stat, _vs) in enumerate(_top5_data[:5], 1):
                 st.markdown(f'<p style="margin:2px 0;font-size:0.82em;"><b>{_rank}. {_kw}</b>&nbsp;<span style="color:#888;">{_stat}</span>&nbsp;<span style="color:#4fc3f7;">{_vs}</span></p>', unsafe_allow_html=True)
-    col_selall, col_desel, col_stat, col_stat_reset, col_sort, col_expand = st.columns([2, 2, 3, 1, 4, 2])
+    col_selall, col_desel, col_stat, col_stat_reset, col_views, col_sort, col_expand = st.columns([2, 2, 3, 1, 3, 4, 2])
     with col_selall:
         if st.button("전체 선택", use_container_width=True):
             for kw in _hist_kws:
@@ -946,6 +946,28 @@ else:
                 _hist["__meta__"].pop("last_stat_update", None)
             _save_keywords_history(_hist)
             st.session_state.keywords_history = _hist
+            st.rerun()
+    with col_views:
+        if st.button("👁 조회수 가져오기", use_container_width=True):
+            _wp_sites = _load_wp_sites()
+            _site_keys = {"bodyandwell": "baw", "bizachieve": "biz"}
+            _views = _load_page_views()
+            _updated = 0
+            for _ws in _wp_sites:
+                _sk = next((v for k, v in _site_keys.items() if k in _ws.get("url", "").lower() or k in _ws.get("name", "").lower()), None)
+                if not _sk:
+                    continue
+                with st.spinner(f"{_ws.get('name','사이트')} 조회수 가져오는 중..."):
+                    _fetched = wp_service.fetch_post_views(_ws, _sk, _hist_kws)
+                for _kw, _cnt in _fetched.items():
+                    if _kw not in _views:
+                        _views[_kw] = {"baw": 0, "biz": 0, "last_updated": ""}
+                    _views[_kw][_sk] = _cnt
+                    _views[_kw]["last_updated"] = datetime.now().strftime("%Y-%m-%d")
+                    _updated += 1
+            with open(PAGE_VIEWS_FILE, "w", encoding="utf-8") as _pvf:
+                json.dump(_views, _pvf, ensure_ascii=False, indent=2)
+            st.success(f"✅ {_updated}개 키워드 조회수 업데이트!")
             st.rerun()
     with col_sort:
         _sort_options = ["가나다순", "검색량 높은 순", "문서수 낮은 순", "모바일 클릭률 높은 순", "별점 높은 순"]

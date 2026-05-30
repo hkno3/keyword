@@ -241,7 +241,7 @@ with st.sidebar:
             _memo_saved = _mf.read()
     except Exception:
         _memo_saved = ""
-    _memo = st.text_area("메모", value=_memo_saved, height=300, label_visibility="collapsed", key="sidebar_memo", placeholder="여기에 메모하세요...")
+    _memo = st.text_area("메모", value=_memo_saved, height=450, label_visibility="collapsed", key="sidebar_memo", placeholder="여기에 메모하세요...")
     if _memo != _memo_saved:
         with open(MEMO_FILE, "w", encoding="utf-8") as _mf:
             _mf.write(_memo)

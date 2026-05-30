@@ -1,0 +1,29 @@
+<!-- 키워드 조회수 트래커 — 워드프레스 head에 삽입 -->
+<!-- TRACKER_URL 을 실제 서버 주소로 변경하세요 -->
+<!-- SITE_ID 를 사이트에 맞게 baw 또는 biz 로 변경하세요 -->
+<script>
+(function() {
+  // ── 설정 ──────────────────────────────────────────────
+  var TRACKER_URL = "http://YOUR_SERVER_IP:8502/track";  // 실제 주소로 변경
+  var SITE_ID = "baw";  // bodyandwell = baw / bizachieve = biz
+  // ─────────────────────────────────────────────────────
+
+  // 워드프레스 로그인 상태면 카운트 안 함
+  function isLoggedIn() {
+    return document.cookie.split(";").some(function(c) {
+      return c.trim().indexOf("wordpress_logged_in_") === 0;
+    });
+  }
+
+  if (isLoggedIn()) return;
+
+  var title = document.title || "";
+  // " - 사이트명" 같은 suffix 제거
+  title = title.split("|")[0].split("–")[0].split("-")[0].trim();
+
+  if (!title) return;
+
+  var img = new Image();
+  img.src = TRACKER_URL + "?title=" + encodeURIComponent(title) + "&site=" + SITE_ID;
+})();
+</script>

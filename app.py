@@ -889,8 +889,8 @@ else:
             _top5_data.append((_kw, _total, _stat, _vs))
     if _top5_data:
         _top5_data.sort(key=lambda x: x[1], reverse=True)
-        with st.expander(f"👁 조회수 TOP 5", expanded=True):
-            for _rank, (_kw, _total, _stat, _vs) in enumerate(_top5_data[:5], 1):
+        with st.expander(f"👁 조회수 TOP 15", expanded=True):
+            for _rank, (_kw, _total, _stat, _vs) in enumerate(_top5_data[:15], 1):
                 st.markdown(f'<p style="margin:2px 0;font-size:0.82em;"><b>{_rank}. {_kw}</b>&nbsp;<span style="color:#888;">{_stat}</span>&nbsp;<span style="color:#4fc3f7;">{_vs}</span></p>', unsafe_allow_html=True)
     col_selall, col_desel, col_stat, col_stat_reset, col_views, col_sort, col_expand = st.columns([2, 2, 3, 1, 3, 4, 2])
     with col_selall:

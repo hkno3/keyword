@@ -78,7 +78,7 @@ def fetch_post_views(site: dict, site_key: str, hist_kws: list) -> dict:
             r = requests.get(base, params={
                 "per_page": 100,
                 "page": page,
-                "_fields": "id,title,meta",
+                "_fields": "id,title,_post_views_count",
                 "status": "publish",
             }, auth=auth, timeout=30)
         except Exception:
@@ -94,7 +94,7 @@ def fetch_post_views(site: dict, site_key: str, hist_kws: list) -> dict:
         for post in posts:
             title = post.get("title", {}).get("rendered", "")
             title = re.sub(r"<[^>]+>", "", title).strip()
-            count = int(post.get("meta", {}).get("_post_views_count", 0) or 0)
+            count = int(post.get("_post_views_count", 0) or 0)
             if count == 0:
                 continue
 

@@ -890,8 +890,12 @@ else:
     if _top5_data:
         _top5_data.sort(key=lambda x: x[1], reverse=True)
         with st.expander(f"👁 조회수 TOP 15", expanded=True):
-            for _rank, (_kw, _total, _stat, _vs) in enumerate(_top5_data[:15], 1):
-                st.markdown(f'<p style="margin:2px 0;font-size:0.82em;"><b>{_rank}. {_kw}</b>&nbsp;<span style="color:#888;">{_stat}</span>&nbsp;<span style="color:#4fc3f7;">{_vs}</span></p>', unsafe_allow_html=True)
+            _top15 = _top5_data[:15]
+            _c1, _c2, _c3 = st.columns(3)
+            for _col, _offset in zip([_c1, _c2, _c3], [0, 5, 10]):
+                with _col:
+                    for _i, (_kw, _total, _stat, _vs) in enumerate(_top15[_offset:_offset+5]):
+                        st.markdown(f'<p style="margin:2px 0;font-size:0.82em;"><b>{_offset+_i+1}. {_kw}</b>&nbsp;<span style="color:#888;">{_stat}</span>&nbsp;<span style="color:#4fc3f7;">{_vs}</span></p>', unsafe_allow_html=True)
     col_selall, col_desel, col_stat, col_stat_reset, col_views, col_sort, col_expand = st.columns([2, 2, 3, 1, 3, 4, 2])
     with col_selall:
         if st.button("전체 선택", use_container_width=True):

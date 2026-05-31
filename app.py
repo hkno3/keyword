@@ -916,7 +916,10 @@ else:
             _top5_data.append((_kw, _total, _stat, _vs))
     if _top5_data:
         _top5_data.sort(key=lambda x: x[1], reverse=True)
-        with st.expander(f"👁 조회수 TOP 30", expanded=True):
+        _top30_baw = sum(_page_views.get(_kw, {}).get("baw", 0) for _kw, _, _, _ in _top5_data[:30])
+        _top30_biz = sum(_page_views.get(_kw, {}).get("biz", 0) for _kw, _, _, _ in _top5_data[:30])
+        _top30_title = f"👁 조회수 TOP 30  |  baw:{_top30_baw}  biz:{_top30_biz}"
+        with st.expander(_top30_title, expanded=True):
             _top15 = _top5_data[:30]
             _c1, _c2, _c3 = st.columns(3)
             for _col, _offset in zip([_c1, _c2, _c3], [0, 10, 20]):

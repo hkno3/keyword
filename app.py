@@ -127,17 +127,22 @@ def _load_page_views_detail() -> dict:
         return {}
 
 @st.dialog("📊 조회수 상세")
-def _show_view_detail(kw: str, detail: dict):
-    data = detail.get(kw, {})
-    if not data:
+def _show_view_detail(kw: str, children: list, detail: dict):
+    all_kws = [kw] + list(children)
+    has_any = False
+    for target_kw in all_kws:
+        data = detail.get(target_kw, {})
+        if not data:
+            continue
+        has_any = True
+        st.markdown(f"**{target_kw}**")
+        for sk, posts in data.items():
+            site_name = {"baw": "bodyandwell", "biz": "bizachieve"}.get(sk, sk)
+            st.caption(site_name)
+            for p in sorted(posts, key=lambda x: x["count"], reverse=True):
+                st.markdown(f"- {p['title']} — **{p['count']}회**")
+    if not has_any:
         st.info("매칭된 포스트 없음")
-        return
-    st.markdown(f"**{kw}** 키워드 매칭 포스트")
-    for sk, posts in data.items():
-        site_name = {"baw": "bodyandwell", "biz": "bizachieve"}.get(sk, sk)
-        st.markdown(f"**{site_name}**")
-        for p in sorted(posts, key=lambda x: x["count"], reverse=True):
-            st.markdown(f"- {p['title']} — **{p['count']}회**")
 
 def _get_view_str(kw: str, views: dict) -> str:
     v = views.get(kw)
@@ -922,7 +927,7 @@ else:
                             st.markdown(f'<p style="margin:2px 0;font-size:0.82em;"><b>{_offset+_i+1}. {_kw}</b>&nbsp;<span style="color:#888;">{_stat}</span>&nbsp;<span style="color:#4fc3f7;">{_vs}</span></p>', unsafe_allow_html=True)
                         with _tm2:
                             if st.button("📊", key=f"top15_vd_{_offset+_i}", help="매칭 포스트 보기"):
-                                _show_view_detail(_kw, _pv_detail)
+                                _show_view_detail(_kw, [], _pv_detail)
     col_selall, col_desel, col_stat, col_stat_reset, col_views, col_sort, col_expand = st.columns([2, 2, 3, 1, 3, 4, 2])
     with col_selall:
         if st.button("전체 선택", use_container_width=True):
@@ -1102,7 +1107,7 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
                             st.rerun()
                     with pc5:
                         if _pk_vs and st.button("📊", key=f"hist_vd_{_pk}", help="매칭 포스트 보기"):
-                            _show_view_detail(_pk, _pv_detail)
+                            _show_view_detail(_pk, _pk_ch, _pv_detail)
                     with pc6:
                         if st.button("✕", key=f"hist_del_{_pk}"):
                             today = datetime.now().strftime("%Y-%m-%d")

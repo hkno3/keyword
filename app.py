@@ -916,12 +916,12 @@ else:
             _top5_data.append((_kw, _total, _stat, _vs))
     if _top5_data:
         _top5_data.sort(key=lambda x: x[1], reverse=True)
-        with st.expander(f"👁 조회수 TOP 15", expanded=True):
-            _top15 = _top5_data[:15]
+        with st.expander(f"👁 조회수 TOP 30", expanded=True):
+            _top15 = _top5_data[:30]
             _c1, _c2, _c3 = st.columns(3)
-            for _col, _offset in zip([_c1, _c2, _c3], [0, 5, 10]):
+            for _col, _offset in zip([_c1, _c2, _c3], [0, 10, 20]):
                 with _col:
-                    for _i, (_kw, _total, _stat, _vs) in enumerate(_top15[_offset:_offset+5]):
+                    for _i, (_kw, _total, _stat, _vs) in enumerate(_top15[_offset:_offset+10]):
                         _tm1, _tm2 = st.columns([5, 1])
                         with _tm1:
                             st.markdown(f'<p style="margin:2px 0;font-size:0.82em;"><b>{_offset+_i+1}. {_kw}</b>&nbsp;<span style="color:#888;">{_stat}</span>&nbsp;<span style="color:#4fc3f7;">{_vs}</span></p>', unsafe_allow_html=True)
@@ -1084,7 +1084,7 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
                     if _pk_vs:
                         _pk_stat = (_pk_stat + "|" if _pk_stat else "") + _pk_vs
                     _pk_exp = st.session_state.get(f"hist_grp_exp_{_pk}", False)
-                    pc1, pc2, pc3, pc4, pc5, pc6 = st.columns([1, 5, 1, 1, 1, 1])
+                    pc1, pc2, pc3, pc4, pc5 = st.columns([1, 5, 1, 1, 1])
                     with pc1:
                         st.checkbox("", key=f"hist_chk_{_pk}", label_visibility="collapsed")
                     with pc2:
@@ -1106,9 +1106,6 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
                             _save_keywords_history(_hist)
                             st.rerun()
                     with pc5:
-                        if _pk_vs and st.button("📊", key=f"hist_vd_{_pk}", help="매칭 포스트 보기"):
-                            _show_view_detail(_pk, _pk_ch, _pv_detail)
-                    with pc6:
                         if st.button("✕", key=f"hist_del_{_pk}"):
                             today = datetime.now().strftime("%Y-%m-%d")
                             _hist[_pk]["excluded"] = True

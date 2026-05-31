@@ -63,13 +63,14 @@ def _normalize(text: str) -> str:
     return re.sub(r"\s+", "", text).lower()
 
 
-def fetch_post_views(site: dict, site_key: str, hist_kws: list) -> dict:
+def fetch_post_views(site: dict, site_key: str, hist_kws: list) -> tuple[dict, dict]:
     """워드프레스 전체 포스트 조회수를 키워드와 매칭해서 반환.
-    반환: {keyword: count}
+    반환: ({keyword: count}, {keyword: [{"title": str, "count": int}]})
     """
     auth = HTTPBasicAuth(site["username"], site["app_password"])
     base = site["url"].rstrip("/") + "/wp-json/wp/v2/posts"
     result = {}
+    detail = {}
     page = 1
     norm_kws = {_normalize(kw): kw for kw in hist_kws}
 
@@ -109,10 +110,11 @@ def fetch_post_views(site: dict, site_key: str, hist_kws: list) -> dict:
 
             if matched:
                 result[matched] = result.get(matched, 0) + count
+                detail.setdefault(matched, []).append({"title": title, "count": count})
 
         total_pages = int(r.headers.get("X-WP-TotalPages", 1))
         if page >= total_pages:
             break
         page += 1
 
-    return result
+    return result, detail

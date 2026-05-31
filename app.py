@@ -23,6 +23,7 @@ KEYWORDS_HISTORY_FILE = os.path.join(os.path.dirname(__file__), "keywords_histor
 KEYWORDS_BLACKLIST_FILE = os.path.join(os.path.dirname(__file__), "keywords_blacklist.json")
 MEMO_FILE = os.path.join(os.path.dirname(__file__), "memo.txt")
 PAGE_VIEWS_FILE = os.path.join(os.path.dirname(__file__), "page_views.json")
+PAGE_VIEWS_DETAIL_FILE = os.path.join(os.path.dirname(__file__), "page_views_detail.json")
 GROQ_USAGE_FILE = os.path.join(os.path.dirname(__file__), "groq_usage.json")
 GEMINI_USAGE_FILE = os.path.join(os.path.dirname(__file__), "gemini_usage.json")
 WP_SITES_FILE = os.path.join(os.path.dirname(__file__), "wp_sites.json")
@@ -117,6 +118,26 @@ def _load_page_views() -> dict:
             return json.load(f)
     except Exception:
         return {}
+
+def _load_page_views_detail() -> dict:
+    try:
+        with open(PAGE_VIEWS_DETAIL_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+@st.dialog("📊 조회수 상세")
+def _show_view_detail(kw: str, detail: dict):
+    data = detail.get(kw, {})
+    if not data:
+        st.info("매칭된 포스트 없음")
+        return
+    st.markdown(f"**{kw}** 키워드 매칭 포스트")
+    for sk, posts in data.items():
+        site_name = {"baw": "bodyandwell", "biz": "bizachieve"}.get(sk, sk)
+        st.markdown(f"**{site_name}**")
+        for p in sorted(posts, key=lambda x: x["count"], reverse=True):
+            st.markdown(f"- {p['title']} — **{p['count']}회**")
 
 def _get_view_str(kw: str, views: dict) -> str:
     v = views.get(kw)
@@ -869,6 +890,7 @@ st.subheader("📋 키워드 히스토리")
 _hist = _load_keywords_history()
 _blacklist = _load_blacklist()
 _page_views = _load_page_views()
+_pv_detail = _load_page_views_detail()
 _hist_kws = sorted([kw for kw, v in _hist.items() if kw != "__meta__" and not v.get("excluded", False)])
 
 if not _hist_kws:
@@ -895,7 +917,12 @@ else:
             for _col, _offset in zip([_c1, _c2, _c3], [0, 5, 10]):
                 with _col:
                     for _i, (_kw, _total, _stat, _vs) in enumerate(_top15[_offset:_offset+5]):
-                        st.markdown(f'<p style="margin:2px 0;font-size:0.82em;"><b>{_offset+_i+1}. {_kw}</b>&nbsp;<span style="color:#888;">{_stat}</span>&nbsp;<span style="color:#4fc3f7;">{_vs}</span></p>', unsafe_allow_html=True)
+                        _tm1, _tm2 = st.columns([5, 1])
+                        with _tm1:
+                            st.markdown(f'<p style="margin:2px 0;font-size:0.82em;"><b>{_offset+_i+1}. {_kw}</b>&nbsp;<span style="color:#888;">{_stat}</span>&nbsp;<span style="color:#4fc3f7;">{_vs}</span></p>', unsafe_allow_html=True)
+                        with _tm2:
+                            if st.button("📊", key=f"top15_vd_{_offset+_i}", help="매칭 포스트 보기"):
+                                _show_view_detail(_kw, _pv_detail)
     col_selall, col_desel, col_stat, col_stat_reset, col_views, col_sort, col_expand = st.columns([2, 2, 3, 1, 3, 4, 2])
     with col_selall:
         if st.button("전체 선택", use_container_width=True):
@@ -962,13 +989,20 @@ else:
                 if not _sk:
                     continue
                 with st.spinner(f"{_ws.get('name','사이트')} 조회수 가져오는 중..."):
-                    _fetched = wp_service.fetch_post_views(_ws, _sk, _hist_kws)
+                    _fetched, _fetched_detail = wp_service.fetch_post_views(_ws, _sk, _hist_kws)
                 for _kw, _cnt in _fetched.items():
                     if _kw not in _views:
                         _views[_kw] = {"baw": 0, "biz": 0, "last_updated": ""}
                     _views[_kw][_sk] = _cnt
                     _views[_kw]["last_updated"] = datetime.now().strftime("%Y-%m-%d")
                     _updated += 1
+                _detail_all = _load_page_views_detail()
+                for _kw, _posts in _fetched_detail.items():
+                    if _kw not in _detail_all:
+                        _detail_all[_kw] = {}
+                    _detail_all[_kw][_sk] = _posts
+                with open(PAGE_VIEWS_DETAIL_FILE, "w", encoding="utf-8") as _pvdf:
+                    json.dump(_detail_all, _pvdf, ensure_ascii=False, indent=2)
             with open(PAGE_VIEWS_FILE, "w", encoding="utf-8") as _pvf:
                 json.dump(_views, _pvf, ensure_ascii=False, indent=2)
             st.toast(f"✅ {_updated}개 키워드 조회수 업데이트!")
@@ -1045,7 +1079,7 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
                     if _pk_vs:
                         _pk_stat = (_pk_stat + "|" if _pk_stat else "") + _pk_vs
                     _pk_exp = st.session_state.get(f"hist_grp_exp_{_pk}", False)
-                    pc1, pc2, pc3, pc4, pc5 = st.columns([1, 5, 1, 1, 1])
+                    pc1, pc2, pc3, pc4, pc5, pc6 = st.columns([1, 5, 1, 1, 1, 1])
                     with pc1:
                         st.checkbox("", key=f"hist_chk_{_pk}", label_visibility="collapsed")
                     with pc2:
@@ -1067,6 +1101,9 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
                             _save_keywords_history(_hist)
                             st.rerun()
                     with pc5:
+                        if _pk_vs and st.button("📊", key=f"hist_vd_{_pk}", help="매칭 포스트 보기"):
+                            _show_view_detail(_pk, _pv_detail)
+                    with pc6:
                         if st.button("✕", key=f"hist_del_{_pk}"):
                             today = datetime.now().strftime("%Y-%m-%d")
                             _hist[_pk]["excluded"] = True
@@ -1089,7 +1126,7 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
                             _ck_stat = "|".join(s for s in [str(_ck_ts), str(_ck_dc), _ck_ctr_s, _ck_star_s] if s) if _ck_ts != "" else ""
                             if _ck_vs:
                                 _ck_stat = (_ck_stat + "|" if _ck_stat else "") + _ck_vs
-                            cc1, cc2, cc3 = st.columns([1, 7, 1])
+                            cc1, cc2, cc3, cc4 = st.columns([1, 7, 1, 1])
                             with cc1:
                                 st.checkbox("", key=f"hist_chk_{_ck}", label_visibility="collapsed")
                             with cc2:
@@ -1101,6 +1138,9 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
                                 else:
                                     st.markdown(f'<p style="margin:0 0 0 10px;font-size:0.76em;">└ <b>{_ck}</b>' + (f'&nbsp;<span style="color:#888;">{_ck_stat}</span>' if _ck_stat else "") + '</p>', unsafe_allow_html=True)
                             with cc3:
+                                if _ck_vs and st.button("📊", key=f"hist_vd_{_ck}", help="매칭 포스트 보기"):
+                                    _show_view_detail(_ck, _pv_detail)
+                            with cc4:
                                 _ck_pub_t = st.checkbox("", key=f"hist_pub_{_ck}", value=_ck_pub, label_visibility="collapsed", help="수동 발행")
                                 if _ck_pub_t != _ck_pub:
                                     _hist[_ck]["published"] = _ck_pub_t

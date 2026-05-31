@@ -24,6 +24,7 @@ KEYWORDS_BLACKLIST_FILE = os.path.join(os.path.dirname(__file__), "keywords_blac
 MEMO_FILE = os.path.join(os.path.dirname(__file__), "memo.txt")
 PAGE_VIEWS_FILE = os.path.join(os.path.dirname(__file__), "page_views.json")
 PAGE_VIEWS_DETAIL_FILE = os.path.join(os.path.dirname(__file__), "page_views_detail.json")
+PAGE_VIEWS_CSV_FILE = os.path.join(os.path.dirname(__file__), "page_views_snapshot.csv")
 GROQ_USAGE_FILE = os.path.join(os.path.dirname(__file__), "groq_usage.json")
 GEMINI_USAGE_FILE = os.path.join(os.path.dirname(__file__), "gemini_usage.json")
 WP_SITES_FILE = os.path.join(os.path.dirname(__file__), "wp_sites.json")
@@ -931,7 +932,7 @@ else:
                         with _tm2:
                             if st.button("📊", key=f"top15_vd_{_offset+_i}", help="매칭 포스트 보기"):
                                 _show_view_detail(_kw, [], _pv_detail)
-    col_selall, col_desel, col_stat, col_stat_reset, col_views, col_sort, col_expand = st.columns([2, 2, 3, 1, 3, 4, 2])
+    col_selall, col_desel, col_stat, col_stat_reset, col_views, col_snap, col_sort, col_expand = st.columns([2, 2, 3, 1, 3, 2, 4, 2])
     with col_selall:
         if st.button("전체 선택", use_container_width=True):
             for kw in _hist_kws:
@@ -1015,6 +1016,19 @@ else:
                 json.dump(_views, _pvf, ensure_ascii=False, indent=2)
             st.toast(f"✅ {_updated}개 키워드 조회수 업데이트!")
             st.rerun()
+    with col_snap:
+        if st.button("📸 스냅샷", use_container_width=True, help="현재 조회수를 CSV에 기록"):
+            import csv, os as _os
+            _today = datetime.now().strftime("%Y-%m-%d")
+            _snap_views = _load_page_views()
+            _write_header = not _os.path.exists(PAGE_VIEWS_CSV_FILE)
+            with open(PAGE_VIEWS_CSV_FILE, "a", newline="", encoding="utf-8-sig") as _cf:
+                _w = csv.writer(_cf)
+                if _write_header:
+                    _w.writerow(["날짜", "키워드", "baw", "biz"])
+                for _kw, _v in sorted(_snap_views.items()):
+                    _w.writerow([_today, _kw, _v.get("baw", 0), _v.get("biz", 0)])
+            st.toast(f"✅ {len(_snap_views)}개 키워드 스냅샷 저장 완료!")
     with col_sort:
         _sort_options = ["가나다순", "검색량 높은 순", "문서수 낮은 순", "모바일 클릭률 높은 순", "별점 높은 순"]
         _prev_sort = st.session_state.get("hist_sort_prev", "가나다순")

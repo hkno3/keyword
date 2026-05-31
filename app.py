@@ -1017,7 +1017,11 @@ else:
             st.rerun()
     with col_sort:
         _sort_options = ["가나다순", "검색량 높은 순", "문서수 낮은 순", "모바일 클릭률 높은 순", "별점 높은 순"]
+        _prev_sort = st.session_state.get("hist_sort_prev", "가나다순")
         _sort_by = st.selectbox("정렬", _sort_options, label_visibility="collapsed", key="hist_sort")
+        if _sort_by != _prev_sort:
+            st.session_state["hist_sort_prev"] = _sort_by
+            st.session_state["hist_page"] = 0
     with col_expand:
         _all_exp = st.session_state.get("hist_all_expand", False)
         if st.button("📂 모두 접기" if _all_exp else "📂 모두 펼치기", use_container_width=True):
@@ -1066,8 +1070,18 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
             _pk_list = sorted(_groups.keys(), key=lambda k: _hist[k].get("star_count", 0), reverse=True)
         else:
             _pk_list = sorted(_groups.keys())
-        for _row_s in range(0, len(_pk_list), 3):
-            _row_pks = _pk_list[_row_s:_row_s + 3]
+
+        _PAGE_SIZE = 100
+        _total_pks = len(_pk_list)
+        _total_pages = max(1, (_total_pks + _PAGE_SIZE - 1) // _PAGE_SIZE)
+        _cur_page = st.session_state.get("hist_page", 0)
+        if _cur_page >= _total_pages:
+            _cur_page = 0
+            st.session_state["hist_page"] = 0
+        _pk_list_page = _pk_list[_cur_page * _PAGE_SIZE : (_cur_page + 1) * _PAGE_SIZE]
+
+        for _row_s in range(0, len(_pk_list_page), 3):
+            _row_pks = _pk_list_page[_row_s:_row_s + 3]
             _grid = st.columns(3)
             for _j in range(3):
                 with _grid[_j]:
@@ -1148,6 +1162,18 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
                                     _hist[_ck]["published"] = _ck_pub_t
                                     _save_keywords_history(_hist)
                                     st.rerun()
+    _pp1, _pp2, _pp3 = st.columns([1, 3, 1])
+    with _pp1:
+        if _cur_page > 0 and st.button("◀ 이전", use_container_width=True):
+            st.session_state["hist_page"] = _cur_page - 1
+            st.rerun()
+    with _pp2:
+        st.caption(f"페이지 {_cur_page + 1} / {_total_pages}  (부모 키워드 {_cur_page * _PAGE_SIZE + 1}~{min((_cur_page + 1) * _PAGE_SIZE, _total_pks)} / {_total_pks}개)")
+    with _pp3:
+        if _cur_page < _total_pages - 1 and st.button("다음 ▶", use_container_width=True):
+            st.session_state["hist_page"] = _cur_page + 1
+            st.rerun()
+
     _excluded_kws = sorted([kw for kw, v in _hist.items() if v.get("excluded", False)])
     if _excluded_kws:
         with st.expander(f"🚫 제외 목록 ({len(_excluded_kws)}개)"):

@@ -1126,7 +1126,7 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
                             _ck_stat = "|".join(s for s in [str(_ck_ts), str(_ck_dc), _ck_ctr_s, _ck_star_s] if s) if _ck_ts != "" else ""
                             if _ck_vs:
                                 _ck_stat = (_ck_stat + "|" if _ck_stat else "") + _ck_vs
-                            cc1, cc2, cc3, cc4 = st.columns([1, 7, 1, 1])
+                            cc1, cc2, cc3 = st.columns([1, 7, 1])
                             with cc1:
                                 st.checkbox("", key=f"hist_chk_{_ck}", label_visibility="collapsed")
                             with cc2:
@@ -1138,9 +1138,6 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
                                 else:
                                     st.markdown(f'<p style="margin:0 0 0 10px;font-size:0.76em;">└ <b>{_ck}</b>' + (f'&nbsp;<span style="color:#888;">{_ck_stat}</span>' if _ck_stat else "") + '</p>', unsafe_allow_html=True)
                             with cc3:
-                                if _ck_vs and st.button("📊", key=f"hist_vd_{_ck}", help="매칭 포스트 보기"):
-                                    _show_view_detail(_ck, _pv_detail)
-                            with cc4:
                                 _ck_pub_t = st.checkbox("", key=f"hist_pub_{_ck}", value=_ck_pub, label_visibility="collapsed", help="수동 발행")
                                 if _ck_pub_t != _ck_pub:
                                     _hist[_ck]["published"] = _ck_pub_t

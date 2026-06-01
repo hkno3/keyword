@@ -967,7 +967,10 @@ else:
     if _cum_data:
         _cum_baw = sum(_page_views.get(k, {}).get("baw", 0) for k, _, _, _ in _cum_data[:50])
         _cum_biz = sum(_page_views.get(k, {}).get("biz", 0) for k, _, _, _ in _cum_data[:50])
-        with st.expander(f"👁 누적 조회수 TOP 50  |  baw:{_cum_baw}  biz:{_cum_biz}", expanded=True):
+        _first_dates = [_page_views.get(k, {}).get("first_tracked", "") for k, _, _, _ in _cum_data[:50]]
+        _first_dates = [d for d in _first_dates if d]
+        _since_str = f"  |  {min(_first_dates)}~" if _first_dates else ""
+        with st.expander(f"👁 누적 조회수 TOP 50  |  baw:{_cum_baw}  biz:{_cum_biz}{_since_str}", expanded=True):
             _render_top50(_cum_data, "cum_vd", _pv_detail, {})
 
     if _today_data:
@@ -1057,8 +1060,11 @@ else:
                 with st.spinner(f"{_ws.get('name','사이트')} 조회수 가져오는 중..."):
                     _fetched, _fetched_today, _fetched_detail = wp_service.fetch_post_views(_ws, _sk, _hist_kws)
                 for _kw, _cnt in _fetched.items():
-                    if _kw not in _views:
-                        _views[_kw] = {"baw": 0, "biz": 0, "today_baw": 0, "today_biz": 0, "last_updated": ""}
+                    _is_new = _kw not in _views
+                    if _is_new:
+                        _views[_kw] = {"baw": 0, "biz": 0, "today_baw": 0, "today_biz": 0, "last_updated": "", "first_tracked": datetime.now().strftime("%Y-%m-%d")}
+                    elif "first_tracked" not in _views[_kw]:
+                        _views[_kw]["first_tracked"] = datetime.now().strftime("%Y-%m-%d")
                     _views[_kw][_sk] = _cnt
                     _views[_kw]["last_updated"] = datetime.now().strftime("%Y-%m-%d")
                     _updated += 1

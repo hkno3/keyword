@@ -1023,20 +1023,19 @@ else:
         if _os.path.exists(PAGE_VIEWS_CSV_FILE):
             with open(PAGE_VIEWS_CSV_FILE, "r", encoding="utf-8-sig") as _cf:
                 for _row in csv.reader(_cf):
-                    if len(_row) >= 3 and f"{_row[0]}-{_row[1]:>02}-{_row[2]:>02}" == _today:
+                    if _row and _row[0] == _today:
                         _snap_already = True
                         break
         _snap_label = "📸 저장완료" if _snap_already else "📸 스냅샷"
         if st.button(_snap_label, use_container_width=True, disabled=_snap_already, help="하루 1회 저장 가능"):
-            _now = datetime.now()
             _snap_views = _load_page_views()
             _write_header = not _os.path.exists(PAGE_VIEWS_CSV_FILE)
             with open(PAGE_VIEWS_CSV_FILE, "a", newline="", encoding="utf-8-sig") as _cf:
                 _w = csv.writer(_cf)
                 if _write_header:
-                    _w.writerow(["연도", "월", "일", "키워드", "baw", "biz"])
+                    _w.writerow(["날짜", "키워드", "baw", "biz"])
                 for _kw, _v in sorted(_snap_views.items()):
-                    _w.writerow([_now.year, _now.month, _now.day, _kw, _v.get("baw", 0), _v.get("biz", 0)])
+                    _w.writerow([_today, _kw, _v.get("baw", 0), _v.get("biz", 0)])
             st.toast(f"✅ {len(_snap_views)}개 키워드 스냅샷 저장 완료!")
     with col_sort:
         _sort_options = ["가나다순", "검색량 높은 순", "문서수 낮은 순", "모바일 클릭률 높은 순", "별점 높은 순"]

@@ -16,8 +16,8 @@ function kw_track_post_view() {
     $count = (int) get_post_meta( $post_id, '_post_views_count', true );
     update_post_meta( $post_id, '_post_views_count', $count + 1 );
 
-    // 오늘 조회수 — "YYYY-MM-DD|N" 형식으로 저장
-    $today = date('Y-m-d');
+    // 오늘 조회수 — "YYYY-MM-DD|N" 형식으로 저장 (워드프레스 시간대 기준)
+    $today = wp_date('Y-m-d');
     $today_meta = get_post_meta( $post_id, '_post_views_today', true );
     $parts = explode( '|', $today_meta );
     if ( count( $parts ) === 2 && $parts[0] === $today ) {
@@ -39,7 +39,7 @@ add_action( 'rest_api_init', function () {
 
     register_rest_field( 'post', '_post_views_today', [
         'get_callback' => function ( $post ) {
-            $today = date('Y-m-d');
+            $today = wp_date('Y-m-d');
             $meta  = get_post_meta( $post['id'], '_post_views_today', true );
             $parts = explode( '|', $meta );
             if ( count( $parts ) === 2 && $parts[0] === $today ) {

@@ -127,6 +127,30 @@ def _load_page_views_detail() -> dict:
     except Exception:
         return {}
 
+def _load_snapshots() -> dict:
+    """반환: {keyword: {date: {"baw": N, "biz": N}}}"""
+    import csv
+    result = {}
+    if not os.path.exists(PAGE_VIEWS_SNAPSHOTS_DIR):
+        return result
+    for fname in sorted(os.listdir(PAGE_VIEWS_SNAPSHOTS_DIR)):
+        if not fname.endswith(".csv"):
+            continue
+        date = fname[:-4]
+        try:
+            with open(os.path.join(PAGE_VIEWS_SNAPSHOTS_DIR, fname), "r", encoding="utf-8-sig") as f:
+                for row in csv.DictReader(f):
+                    kw = row.get("키워드", "")
+                    if not kw:
+                        continue
+                    result.setdefault(kw, {})[date] = {
+                        "baw": int(row.get("baw", 0) or 0),
+                        "biz": int(row.get("biz", 0) or 0),
+                    }
+        except Exception:
+            pass
+    return result
+
 @st.dialog("📊 조회수 상세")
 def _show_view_detail(kw: str, children: list, detail: dict):
     all_kws = [kw] + list(children)
@@ -932,6 +956,20 @@ else:
                         with _tm2:
                             if st.button("📊", key=f"top15_vd_{_offset+_i}", help="매칭 포스트 보기"):
                                 _show_view_detail(_kw, [], _pv_detail)
+    _snapshots = _load_snapshots()
+    if _snapshots:
+        with st.expander("📈 스냅샷 분석", expanded=False):
+            import pandas as pd
+            _snap_kws = sorted(_snapshots.keys(), key=lambda k: sum(v["baw"] + v["biz"] for v in _snapshots[k].values()), reverse=True)
+            _snap_mode = st.radio("보기", ["TOP 30", "전부보기"], horizontal=True, label_visibility="collapsed", key="snap_mode")
+            _snap_kws_show = _snap_kws[:30] if _snap_mode == "TOP 30" else _snap_kws
+            _sel_kw = st.selectbox("키워드 선택", _snap_kws_show, key="snap_sel_kw")
+            if _sel_kw:
+                _kw_data = _snapshots[_sel_kw]
+                _dates = sorted(_kw_data.keys())
+                _df = pd.DataFrame([{"날짜": d, "baw": _kw_data[d]["baw"], "biz": _kw_data[d]["biz"]} for d in _dates]).set_index("날짜")
+                st.line_chart(_df)
+
     col_selall, col_desel, col_stat, col_stat_reset, col_views, col_snap, col_sort, col_expand = st.columns([2, 2, 3, 1, 3, 2, 4, 2])
     with col_selall:
         if st.button("전체 선택", use_container_width=True):

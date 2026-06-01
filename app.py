@@ -24,7 +24,7 @@ KEYWORDS_BLACKLIST_FILE = os.path.join(os.path.dirname(__file__), "keywords_blac
 MEMO_FILE = os.path.join(os.path.dirname(__file__), "memo.txt")
 PAGE_VIEWS_FILE = os.path.join(os.path.dirname(__file__), "page_views.json")
 PAGE_VIEWS_DETAIL_FILE = os.path.join(os.path.dirname(__file__), "page_views_detail.json")
-PAGE_VIEWS_CSV_FILE = os.path.join(os.path.dirname(__file__), "page_views_snapshot.csv")
+PAGE_VIEWS_SNAPSHOTS_DIR = os.path.join(os.path.dirname(__file__), "snapshots")
 GROQ_USAGE_FILE = os.path.join(os.path.dirname(__file__), "groq_usage.json")
 GEMINI_USAGE_FILE = os.path.join(os.path.dirname(__file__), "gemini_usage.json")
 WP_SITES_FILE = os.path.join(os.path.dirname(__file__), "wp_sites.json")
@@ -1019,21 +1019,15 @@ else:
     with col_snap:
         import csv, os as _os
         _today = datetime.now().strftime("%Y-%m-%d")
-        _snap_already = False
-        if _os.path.exists(PAGE_VIEWS_CSV_FILE):
-            with open(PAGE_VIEWS_CSV_FILE, "r", encoding="utf-8-sig") as _cf:
-                for _row in csv.reader(_cf):
-                    if _row and _row[0] == _today:
-                        _snap_already = True
-                        break
+        _os.makedirs(PAGE_VIEWS_SNAPSHOTS_DIR, exist_ok=True)
+        _snap_file = _os.path.join(PAGE_VIEWS_SNAPSHOTS_DIR, f"{_today}.csv")
+        _snap_already = _os.path.exists(_snap_file)
         _snap_label = "📸 저장완료" if _snap_already else "📸 스냅샷"
         if st.button(_snap_label, use_container_width=True, disabled=_snap_already, help="하루 1회 저장 가능"):
             _snap_views = _load_page_views()
-            _write_header = not _os.path.exists(PAGE_VIEWS_CSV_FILE)
-            with open(PAGE_VIEWS_CSV_FILE, "a", newline="", encoding="utf-8-sig") as _cf:
+            with open(_snap_file, "w", newline="", encoding="utf-8-sig") as _cf:
                 _w = csv.writer(_cf)
-                if _write_header:
-                    _w.writerow(["날짜", "키워드", "baw", "biz"])
+                _w.writerow(["날짜", "키워드", "baw", "biz"])
                 for _kw, _v in sorted(_snap_views.items()):
                     _w.writerow([_today, _kw, _v.get("baw", 0), _v.get("biz", 0)])
             st.toast(f"✅ {len(_snap_views)}개 키워드 스냅샷 저장 완료!")

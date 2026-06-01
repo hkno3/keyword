@@ -1053,12 +1053,16 @@ else:
             _site_keys = {"bodyandwell": "baw", "bizachieve": "biz"}
             _views = _load_page_views()
             _updated = 0
+            _processed_sks = []
             for _ws in _wp_sites:
                 _sk = next((v for k, v in _site_keys.items() if k in _ws.get("url", "").lower() or k in _ws.get("name", "").lower()), None)
                 if not _sk:
                     continue
                 with st.spinner(f"{_ws.get('name','사이트')} 조회수 가져오는 중..."):
                     _fetched, _fetched_today, _fetched_detail = wp_service.fetch_post_views(_ws, _sk, _hist_kws)
+                # 오늘 조회수 먼저 전체 0으로 초기화
+                for _kw in _views:
+                    _views[_kw][f"today_{_sk}"] = 0
                 for _kw, _cnt in _fetched.items():
                     _is_new = _kw not in _views
                     if _is_new:

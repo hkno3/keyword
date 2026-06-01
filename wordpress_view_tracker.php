@@ -12,8 +12,19 @@ function kw_track_post_view() {
     $post_id = get_the_ID();
     if ( ! $post_id ) return;
 
+    // 누적 조회수
     $count = (int) get_post_meta( $post_id, '_post_views_count', true );
     update_post_meta( $post_id, '_post_views_count', $count + 1 );
+
+    // 오늘 조회수 — "YYYY-MM-DD|N" 형식으로 저장
+    $today = date('Y-m-d');
+    $today_meta = get_post_meta( $post_id, '_post_views_today', true );
+    $parts = explode( '|', $today_meta );
+    if ( count( $parts ) === 2 && $parts[0] === $today ) {
+        update_post_meta( $post_id, '_post_views_today', $today . '|' . ( (int) $parts[1] + 1 ) );
+    } else {
+        update_post_meta( $post_id, '_post_views_today', $today . '|1' );
+    }
 }
 add_action( 'wp_head', 'kw_track_post_view' );
 
@@ -23,6 +34,19 @@ add_action( 'rest_api_init', function () {
         'get_callback' => function ( $post ) {
             return (int) get_post_meta( $post['id'], '_post_views_count', true );
         },
-        'schema' => [ 'type' => 'integer', 'description' => '포스트 조회수' ],
+        'schema' => [ 'type' => 'integer', 'description' => '누적 조회수' ],
+    ] );
+
+    register_rest_field( 'post', '_post_views_today', [
+        'get_callback' => function ( $post ) {
+            $today = date('Y-m-d');
+            $meta  = get_post_meta( $post['id'], '_post_views_today', true );
+            $parts = explode( '|', $meta );
+            if ( count( $parts ) === 2 && $parts[0] === $today ) {
+                return (int) $parts[1];
+            }
+            return 0;
+        },
+        'schema' => [ 'type' => 'integer', 'description' => '오늘 조회수' ],
     ] );
 } );

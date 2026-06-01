@@ -927,35 +927,54 @@ if not _hist_kws:
     st.caption("키워드 히스토리가 없습니다. 위에서 황금 롱테일 키워드를 찾아주세요.")
 else:
     st.caption(f"총 {len(_hist_kws)}개 황금 롱테일 키워드 (모바일 클릭률 2% 이상)")
-    # ── 조회수 TOP 5 ──────────────────────────────────────
-    _top5_data = []
-    for _kw in _hist_kws:
-        _vs = _get_view_str(_kw, _page_views)
-        if _vs:
-            _total = sum(_page_views.get(_kw, {}).get(s, 0) for s in ("baw", "biz"))
-            _ts = _hist[_kw].get("total_search", "")
-            _dc = _hist[_kw].get("doc_count", "")
-            _ctr = _hist[_kw].get("mobile_ctr", "")
-            _sc = _hist[_kw].get("star_count", "")
-            _stat = "|".join(s for s in [str(_ts), str(_dc), f"{_ctr:.2f}" if _ctr != "" else "", f"⭐{_sc}" if _sc != "" else ""] if s)
-            _top5_data.append((_kw, _total, _stat, _vs))
-    if _top5_data:
-        _top5_data.sort(key=lambda x: x[1], reverse=True)
-        _top30_baw = sum(_page_views.get(_kw, {}).get("baw", 0) for _kw, _, _, _ in _top5_data[:30])
-        _top30_biz = sum(_page_views.get(_kw, {}).get("biz", 0) for _kw, _, _, _ in _top5_data[:30])
-        _top30_title = f"👁 조회수 TOP 30  |  baw:{_top30_baw}  biz:{_top30_biz}"
-        with st.expander(_top30_title, expanded=True):
-            _top15 = _top5_data[:30]
-            _c1, _c2, _c3 = st.columns(3)
-            for _col, _offset in zip([_c1, _c2, _c3], [0, 10, 20]):
-                with _col:
-                    for _i, (_kw, _total, _stat, _vs) in enumerate(_top15[_offset:_offset+10]):
-                        _tm1, _tm2 = st.columns([5, 1])
-                        with _tm1:
-                            st.markdown(f'<p style="margin:2px 0;font-size:0.82em;"><b>{_offset+_i+1}. {_kw}</b>&nbsp;<span style="color:#888;">{_stat}</span>&nbsp;<span style="color:#4fc3f7;">{_vs}</span></p>', unsafe_allow_html=True)
-                        with _tm2:
-                            if st.button("📊", key=f"top15_vd_{_offset+_i}", help="매칭 포스트 보기"):
-                                _show_view_detail(_kw, [], _pv_detail)
+    # ── 누적 조회수 TOP 50 / 오늘 조회수 TOP 50 ──────────────────────────────────────
+    def _build_top_data(kws, views, baw_key, biz_key):
+        data = []
+        for kw in kws:
+            v = views.get(kw, {})
+            baw = v.get(baw_key, 0)
+            biz = v.get(biz_key, 0)
+            total = baw + biz
+            if total == 0:
+                continue
+            vs = " ".join(p for p in [f"baw:{baw}" if baw else "", f"biz:{biz}" if biz else ""] if p)
+            ts = _hist[kw].get("total_search", "")
+            dc = _hist[kw].get("doc_count", "")
+            ctr = _hist[kw].get("mobile_ctr", "")
+            sc = _hist[kw].get("star_count", "")
+            stat = "|".join(s for s in [str(ts), str(dc), f"{ctr:.2f}" if ctr != "" else "", f"⭐{sc}" if sc != "" else ""] if s)
+            data.append((kw, total, stat, vs))
+        data.sort(key=lambda x: x[1], reverse=True)
+        return data
+
+    def _render_top50(data, key_prefix, pv_detail, children_map):
+        top50 = data[:50]
+        c1, c2, c3 = st.columns(3)
+        per = 17
+        for col, offset in zip([c1, c2, c3], [0, 17, 34]):
+            with col:
+                for i, (kw, total, stat, vs) in enumerate(top50[offset:offset+per]):
+                    tm1, tm2 = st.columns([5, 1])
+                    with tm1:
+                        st.markdown(f'<p style="margin:2px 0;font-size:0.82em;"><b>{offset+i+1}. {kw}</b>&nbsp;<span style="color:#888;">{stat}</span>&nbsp;<span style="color:#4fc3f7;">{vs}</span></p>', unsafe_allow_html=True)
+                    with tm2:
+                        if st.button("📊", key=f"{key_prefix}_{offset+i}", help="매칭 포스트 보기"):
+                            _show_view_detail(kw, children_map.get(kw, []), pv_detail)
+
+    _cum_data = _build_top_data(_hist_kws, _page_views, "baw", "biz")
+    _today_data = _build_top_data(_hist_kws, _page_views, "today_baw", "today_biz")
+
+    if _cum_data:
+        _cum_baw = sum(_page_views.get(k, {}).get("baw", 0) for k, _, _, _ in _cum_data[:50])
+        _cum_biz = sum(_page_views.get(k, {}).get("biz", 0) for k, _, _, _ in _cum_data[:50])
+        with st.expander(f"👁 누적 조회수 TOP 50  |  baw:{_cum_baw}  biz:{_cum_biz}", expanded=True):
+            _render_top50(_cum_data, "cum_vd", _pv_detail, {})
+
+    if _today_data:
+        _today_baw = sum(_page_views.get(k, {}).get("today_baw", 0) for k, _, _, _ in _today_data[:50])
+        _today_biz = sum(_page_views.get(k, {}).get("today_biz", 0) for k, _, _, _ in _today_data[:50])
+        with st.expander(f"🌅 오늘 조회수 TOP 50  |  baw:{_today_baw}  biz:{_today_biz}", expanded=True):
+            _render_top50(_today_data, "today_vd", _pv_detail, {})
     _snapshots = _load_snapshots()
     if _snapshots:
         with st.expander("📈 스냅샷 분석", expanded=False):
@@ -1036,13 +1055,17 @@ else:
                 if not _sk:
                     continue
                 with st.spinner(f"{_ws.get('name','사이트')} 조회수 가져오는 중..."):
-                    _fetched, _fetched_detail = wp_service.fetch_post_views(_ws, _sk, _hist_kws)
+                    _fetched, _fetched_today, _fetched_detail = wp_service.fetch_post_views(_ws, _sk, _hist_kws)
                 for _kw, _cnt in _fetched.items():
                     if _kw not in _views:
-                        _views[_kw] = {"baw": 0, "biz": 0, "last_updated": ""}
+                        _views[_kw] = {"baw": 0, "biz": 0, "today_baw": 0, "today_biz": 0, "last_updated": ""}
                     _views[_kw][_sk] = _cnt
                     _views[_kw]["last_updated"] = datetime.now().strftime("%Y-%m-%d")
                     _updated += 1
+                for _kw, _cnt in _fetched_today.items():
+                    if _kw not in _views:
+                        _views[_kw] = {"baw": 0, "biz": 0, "today_baw": 0, "today_biz": 0, "last_updated": ""}
+                    _views[_kw][f"today_{_sk}"] = _cnt
                 _detail_all = _load_page_views_detail()
                 for _kw, _posts in _fetched_detail.items():
                     if _kw not in _detail_all:

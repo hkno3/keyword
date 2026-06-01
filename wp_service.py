@@ -63,13 +63,14 @@ def _normalize(text: str) -> str:
     return re.sub(r"\s+", "", text).lower()
 
 
-def fetch_post_views(site: dict, site_key: str, hist_kws: list) -> tuple[dict, dict]:
+def fetch_post_views(site: dict, site_key: str, hist_kws: list) -> tuple[dict, dict, dict]:
     """워드프레스 전체 포스트 조회수를 키워드와 매칭해서 반환.
-    반환: ({keyword: count}, {keyword: [{"title": str, "count": int}]})
+    반환: ({keyword: count}, {keyword: today_count}, {keyword: [{"title": str, "count": int}]})
     """
     auth = HTTPBasicAuth(site["username"], site["app_password"])
     base = site["url"].rstrip("/") + "/wp-json/wp/v2/posts"
     result = {}
+    result_today = {}
     detail = {}
     page = 1
     norm_kws = {_normalize(kw): kw for kw in hist_kws}
@@ -79,7 +80,7 @@ def fetch_post_views(site: dict, site_key: str, hist_kws: list) -> tuple[dict, d
             r = requests.get(base, params={
                 "per_page": 100,
                 "page": page,
-                "_fields": "id,title,_post_views_count",
+                "_fields": "id,title,_post_views_count,_post_views_today",
                 "status": "publish",
             }, auth=auth, timeout=30)
         except Exception:
@@ -96,7 +97,8 @@ def fetch_post_views(site: dict, site_key: str, hist_kws: list) -> tuple[dict, d
             title = post.get("title", {}).get("rendered", "")
             title = re.sub(r"<[^>]+>", "", title).strip()
             count = int(post.get("_post_views_count", 0) or 0)
-            if count == 0:
+            today_count = int(post.get("_post_views_today", 0) or 0)
+            if count == 0 and today_count == 0:
                 continue
 
             norm_title = _normalize(title)
@@ -109,12 +111,15 @@ def fetch_post_views(site: dict, site_key: str, hist_kws: list) -> tuple[dict, d
                         best_len = len(norm_kw)
 
             if matched:
-                result[matched] = result.get(matched, 0) + count
-                detail.setdefault(matched, []).append({"title": title, "count": count})
+                if count > 0:
+                    result[matched] = result.get(matched, 0) + count
+                    detail.setdefault(matched, []).append({"title": title, "count": count})
+                if today_count > 0:
+                    result_today[matched] = result_today.get(matched, 0) + today_count
 
         total_pages = int(r.headers.get("X-WP-TotalPages", 1))
         if page >= total_pages:
             break
         page += 1
 
-    return result, detail
+    return result, result_today, detail

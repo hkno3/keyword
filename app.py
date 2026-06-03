@@ -992,6 +992,27 @@ else:
                 _df = pd.DataFrame([{"날짜": d, "baw": _kw_data[d]["baw"], "biz": _kw_data[d]["biz"]} for d in _dates]).set_index("날짜")
                 st.line_chart(_df)
 
+    # ── 현재 페이지 키워드 미리 계산 (버튼에서 사용) ──────────────────────────────────────
+    _groups_pre = _build_parent_groups(_hist_kws, _hist)
+    _sort_pre = st.session_state.get("hist_sort", "별점 높은 순")
+    if _sort_pre == "검색량 높은 순":
+        _pk_list_pre = sorted(_groups_pre.keys(), key=lambda k: _hist[k].get("total_search", 0), reverse=True)
+    elif _sort_pre == "문서수 낮은 순":
+        _pk_list_pre = sorted(_groups_pre.keys(), key=lambda k: _hist[k].get("doc_count", 9999999))
+    elif _sort_pre == "모바일 클릭률 높은 순":
+        _pk_list_pre = sorted(_groups_pre.keys(), key=lambda k: _hist[k].get("mobile_ctr", 0), reverse=True)
+    elif _sort_pre == "별점 높은 순":
+        _pk_list_pre = sorted(_groups_pre.keys(), key=lambda k: _hist[k].get("star_count", 0), reverse=True)
+    else:
+        _pk_list_pre = sorted(_groups_pre.keys())
+    _PAGE_SIZE_PRE = 100
+    _cur_page_pre = st.session_state.get("hist_page", 0)
+    _pk_page_pre = _pk_list_pre[_cur_page_pre * _PAGE_SIZE_PRE : (_cur_page_pre + 1) * _PAGE_SIZE_PRE]
+    _page_all_kws = []
+    for _ppk in _pk_page_pre:
+        _page_all_kws.append(_ppk)
+        _page_all_kws.extend(_groups_pre.get(_ppk, []))
+
     col_selall, col_desel, col_stat, col_stat_reset, col_views, col_snap, col_sort, col_expand = st.columns([2, 2, 3, 1, 3, 2, 4, 2])
     with col_selall:
         if st.button("전체 선택", use_container_width=True):
@@ -1004,21 +1025,20 @@ else:
                 st.session_state[f"hist_chk_{kw}"] = False
             st.rerun()
     with col_stat:
-        _last_stat_update = _hist.get("__meta__", {}).get("last_stat_update")
+        _last_stat_update = _hist.get("__meta__", {}).get(f"last_stat_update_p{_cur_page_pre}")
         _stat_days_left = 0
         if _last_stat_update:
             _stat_elapsed = (datetime.now() - datetime.strptime(_last_stat_update, "%Y-%m-%d")).days
             _stat_days_left = max(0, 30 - _stat_elapsed)
-        _missing_stat_kws = [kw for kw in _hist_kws if "total_search" not in _hist[kw] or "star_count" not in _hist[kw]]
-        _stat_btn_disabled = _stat_days_left > 0 and len(_missing_stat_kws) == 0
-        _stat_btn_label = f"📊 통계 채우기 ({len(_missing_stat_kws)}개)" if not _stat_days_left else f"📊 통계 갱신 ({_stat_days_left}일 후)"
+        _stat_btn_disabled = _stat_days_left > 0
+        _stat_btn_label = f"📊 통계 갱신 ({_stat_days_left}일 후)" if _stat_days_left else f"📊 통계 갱신 ({len(_page_all_kws)}개)"
         if st.button(_stat_btn_label, use_container_width=True, disabled=_stat_btn_disabled):
             _naver_cid = os.getenv("NAVER_AD_CUSTOMER_ID", "")
             _naver_akey = os.getenv("NAVER_AD_API_KEY", "")
             _naver_skey = os.getenv("NAVER_AD_SECRET_KEY", "")
             _naver_client_id = os.getenv("NAVER_CLIENT_ID", "")
             _naver_client_secret = os.getenv("NAVER_CLIENT_SECRET", "")
-            _update_targets = _missing_stat_kws if _missing_stat_kws else _hist_kws
+            _update_targets = _page_all_kws
             with st.spinner(f"통계 조회 중... ({len(_update_targets)}개)"):
                 _vol_data = naver_api.get_search_volumes_batch(_update_targets, _naver_cid, _naver_akey, _naver_skey)
                 _doc_data = naver_api.get_doc_counts_parallel(_update_targets, _naver_client_id, _naver_client_secret)
@@ -1035,7 +1055,7 @@ else:
                     _updated += 1
             if "__meta__" not in _hist:
                 _hist["__meta__"] = {}
-            _hist["__meta__"]["last_stat_update"] = datetime.now().strftime("%Y-%m-%d")
+            _hist["__meta__"][f"last_stat_update_p{_cur_page_pre}"] = datetime.now().strftime("%Y-%m-%d")
             _save_keywords_history(_hist)
             st.session_state.keywords_history = _hist
             st.success(f"✅ {_updated}개 키워드 통계 업데이트 완료!")
@@ -1043,7 +1063,7 @@ else:
     with col_stat_reset:
         if st.button("🔄", use_container_width=True, help="통계 갱신 타이머 초기화"):
             if "__meta__" in _hist:
-                _hist["__meta__"].pop("last_stat_update", None)
+                _hist["__meta__"].pop(f"last_stat_update_p{_cur_page_pre}", None)
             _save_keywords_history(_hist)
             st.session_state.keywords_history = _hist
             st.rerun()
@@ -1257,7 +1277,8 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
             st.session_state["hist_page"] = _cur_page - 1
             st.rerun()
     with _pp2:
-        st.caption(f"페이지 {_cur_page + 1} / {_total_pages}  (부모 키워드 {_cur_page * _PAGE_SIZE + 1}~{min((_cur_page + 1) * _PAGE_SIZE, _total_pks)} / {_total_pks}개)")
+        _page_child_cnt = sum(len(_groups.get(pk, [])) for pk in _pk_list_page)
+        st.caption(f"페이지 {_cur_page + 1} / {_total_pages}  (부모 {_cur_page * _PAGE_SIZE + 1}~{min((_cur_page + 1) * _PAGE_SIZE, _total_pks)} / {_total_pks}개  |  자식 {_page_child_cnt}개  |  합계 {len(_pk_list_page) + _page_child_cnt}개)")
     with _pp3:
         if _cur_page < _total_pages - 1 and st.button("다음 ▶", use_container_width=True):
             st.session_state["hist_page"] = _cur_page + 1

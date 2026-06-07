@@ -927,6 +927,24 @@ if not _hist_kws:
     st.caption("키워드 히스토리가 없습니다. 위에서 황금 롱테일 키워드를 찾아주세요.")
 else:
     st.caption(f"총 {len(_hist_kws)}개 황금 롱테일 키워드 (모바일 클릭률 2% 이상)")
+
+    # ── 별 3,4개 부모 키워드 + 자식 키워드 일괄 제외 ──────────────────────────────────────
+    _groups_for_del34 = _build_parent_groups(_hist_kws, _hist)
+    _del34_pks = [pk for pk in _groups_for_del34 if _hist.get(pk, {}).get("star_count") in (3, 4)]
+    if _del34_pks:
+        _del34_total = sum(1 + len(_groups_for_del34[pk]) for pk in _del34_pks)
+        if st.button(f"🗑️ 별 3,4개 부모 키워드 일괄 제외 (부모 {len(_del34_pks)}개 + 자식 포함 총 {_del34_total}개)", key="hist_del34_btn"):
+            _today34 = datetime.now().strftime("%Y-%m-%d")
+            for _pk34 in _del34_pks:
+                for _kw34 in [_pk34] + _groups_for_del34[_pk34]:
+                    if _kw34 in _hist:
+                        _hist[_kw34]["excluded"] = True
+                        _hist[_kw34]["excluded_at"] = _today34
+                        _hist[_kw34]["exclude_reason"] = "deleted"
+            _save_keywords_history(_hist)
+            st.toast(f"✅ {_del34_total}개 키워드 제외 완료!")
+            st.rerun()
+
     # ── 누적 조회수 TOP 50 / 오늘 조회수 TOP 50 ──────────────────────────────────────
     def _build_top_data(kws, views, baw_key, biz_key):
         data = []

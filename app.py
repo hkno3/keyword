@@ -597,7 +597,7 @@ if "bulk_title_versions" not in st.session_state:
 crawled_file_links = _load_crawled_links()
 groq_keys = [k for k in [groq_key, groq_key2] if k.strip()]
 
-col_cat, col_num, col_stars, col_btn1, col_btn2 = st.columns([2, 1, 1, 1, 1])
+col_cat, col_num, col_search, col_stars, col_btn1, col_btn2 = st.columns([2, 1, 1, 1, 1, 1])
 with col_cat:
     auto_category = st.selectbox("카테고리", [
         "건강", "부동산", "사업", "투자", "정부지원금",
@@ -605,6 +605,9 @@ with col_cat:
     ], label_visibility="collapsed")
 with col_num:
     auto_target = st.number_input("찾을 키워드 수", min_value=1, value=10, step=1, label_visibility="collapsed")
+with col_search:
+    auto_min_search = st.number_input("최소 검색량", min_value=0, value=2000, step=100, label_visibility="collapsed",
+                                       help="이 검색량 이상인 키워드만 문서수를 조회합니다 (API 절약)")
 with col_stars:
     auto_min_stars = st.number_input("최소 별 개수", min_value=1, max_value=5, value=5, step=1, label_visibility="collapsed")
 with col_btn1:
@@ -751,10 +754,10 @@ if start_btn:
             # 검색량 조회
             related = naver_api.get_search_volumes_batch(autocomplete_kws, customer_id, ad_key, ad_secret)
             st.session_state.naver_ad_calls += len(autocomplete_kws)
-            to_lookup = {k: v for k, v in related.items() if v["total_search"] >= 2000}
+            to_lookup = {k: v for k, v in related.items() if v["total_search"] >= auto_min_search}
 
             if not to_lookup:
-                status_box.warning(f"⚠️ 검색량 2000 이상 키워드 없음 ({len(related)}개 조회) → 다음 기사")
+                status_box.warning(f"⚠️ 검색량 {auto_min_search:,} 이상 키워드 없음 ({len(related)}개 조회) → 다음 기사")
                 continue
 
             # 문서수 조회

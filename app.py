@@ -606,7 +606,7 @@ with col_cat:
 with col_num:
     auto_target = st.number_input("찾을 키워드 수", min_value=1, value=10, step=1, label_visibility="collapsed")
 with col_stars:
-    auto_min_stars = st.number_input("최소 별 개수", min_value=1, max_value=5, value=3, step=1, label_visibility="collapsed")
+    auto_min_stars = st.number_input("최소 별 개수", min_value=1, max_value=5, value=5, step=1, label_visibility="collapsed")
 with col_btn1:
     start_btn = st.button("🤖 자동 찾기", type="primary", use_container_width=True)
 with col_btn2:
@@ -927,6 +927,20 @@ if not _hist_kws:
     st.caption("키워드 히스토리가 없습니다. 위에서 황금 롱테일 키워드를 찾아주세요.")
 else:
     st.caption(f"총 {len(_hist_kws)}개 황금 롱테일 키워드 (모바일 클릭률 2% 이상)")
+
+    # ── 별 3,4개 부모 키워드 + 자식 키워드 일괄 삭제 (히스토리에서 완전 제거 → 추후 재등장 가능) ──
+    _groups_for_del34 = _build_parent_groups(_hist_kws, _hist)
+    _del34_pks = [pk for pk in _groups_for_del34 if _hist.get(pk, {}).get("star_count") in (3, 4)]
+    if _del34_pks:
+        _del34_total = sum(1 + len(_groups_for_del34[pk]) for pk in _del34_pks)
+        if st.button(f"🗑️ 별 3,4개 부모 키워드 일괄 삭제 (부모 {len(_del34_pks)}개 + 자식 포함 총 {_del34_total}개)", key="hist_del34_btn"):
+            for _pk34 in _del34_pks:
+                for _kw34 in [_pk34] + _groups_for_del34[_pk34]:
+                    _hist.pop(_kw34, None)
+            _save_keywords_history(_hist)
+            st.toast(f"✅ {_del34_total}개 키워드 히스토리에서 삭제 완료! (다음 자동 찾기에서 다시 발견되면 재등장)")
+            st.rerun()
+
     # ── 누적 조회수 TOP 50 / 오늘 조회수 TOP 50 ──────────────────────────────────────
     def _build_top_data(kws, views, baw_key, biz_key):
         data = []
@@ -1282,6 +1296,16 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
     with _pp3:
         if _cur_page < _total_pages - 1 and st.button("다음 ▶", use_container_width=True):
             st.session_state["hist_page"] = _cur_page + 1
+            st.rerun()
+
+    if _pk_list_page:
+        _page_total_del = len(_pk_list_page) + _page_child_cnt
+        if st.button(f"🗑️ 현재 페이지 키워드 일괄 삭제 (부모 {len(_pk_list_page)}개 + 자식 {_page_child_cnt}개 = {_page_total_del}개)", key="hist_del_page_btn"):
+            for _pk_d in _pk_list_page:
+                for _kw_d in [_pk_d] + _groups.get(_pk_d, []):
+                    _hist.pop(_kw_d, None)
+            _save_keywords_history(_hist)
+            st.toast(f"✅ 현재 페이지 {_page_total_del}개 키워드 히스토리에서 삭제 완료!")
             st.rerun()
 
     _excluded_kws = sorted([kw for kw, v in _hist.items() if v.get("excluded", False)])
@@ -1719,7 +1743,7 @@ with col_a:
     min_search_pre = st.number_input("문서수 조회 최소 검색량 (API 절약)", min_value=0, value=2000, step=100,
                                      help="이 검색량 이상인 키워드만 블로그 문서수를 조회합니다")
 with col_b:
-    min_stars_pre = st.number_input("최소 별 개수 (1~5)", min_value=1, max_value=5, value=3, step=1,
+    min_stars_pre = st.number_input("최소 별 개수 (1~5)", min_value=1, max_value=5, value=5, step=1,
                                     help="이 별 개수 이상인 키워드만 결과에 표시합니다")
 
 if st.button("🚀 키워드 분석 시작", type="primary", use_container_width=True):
@@ -1808,7 +1832,7 @@ if st.session_state.keyword_table:
     with col2:
         max_doc = st.number_input("최대 문서수 (0=제한없음)", min_value=0, value=0, step=1000)
     with col3:
-        min_stars = st.number_input("최소 별 개수 (1~5)", min_value=1, max_value=5, value=st.session_state.get("min_stars_pre", 3), step=1)
+        min_stars = st.number_input("최소 별 개수 (1~5)", min_value=1, max_value=5, value=st.session_state.get("min_stars_pre", 5), step=1)
 
     all_stars = ["⭐", "⭐⭐", "⭐⭐⭐", "⭐⭐⭐⭐", "⭐⭐⭐⭐⭐"]
     valid_stars = set(all_stars[min_stars - 1:])

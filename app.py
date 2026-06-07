@@ -1298,6 +1298,16 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
             st.session_state["hist_page"] = _cur_page + 1
             st.rerun()
 
+    if _pk_list_page:
+        _page_total_del = len(_pk_list_page) + _page_child_cnt
+        if st.button(f"🗑️ 현재 페이지 키워드 일괄 삭제 (부모 {len(_pk_list_page)}개 + 자식 {_page_child_cnt}개 = {_page_total_del}개)", key="hist_del_page_btn"):
+            for _pk_d in _pk_list_page:
+                for _kw_d in [_pk_d] + _groups.get(_pk_d, []):
+                    _hist.pop(_kw_d, None)
+            _save_keywords_history(_hist)
+            st.toast(f"✅ 현재 페이지 {_page_total_del}개 키워드 히스토리에서 삭제 완료!")
+            st.rerun()
+
     _excluded_kws = sorted([kw for kw, v in _hist.items() if v.get("excluded", False)])
     if _excluded_kws:
         with st.expander(f"🚫 제외 목록 ({len(_excluded_kws)}개)"):

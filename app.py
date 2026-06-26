@@ -608,7 +608,7 @@ with col_source:
 with col_num:
     auto_target = st.number_input("찾을 키워드 수", min_value=1, value=10, step=1, label_visibility="collapsed")
 with col_search:
-    auto_min_search = st.number_input("최소 검색량", min_value=0, value=2000, step=100, label_visibility="collapsed",
+    auto_min_search = st.number_input("최소 검색량", min_value=0, value=1000, step=100, label_visibility="collapsed",
                                        help="이 검색량 이상인 키워드만 문서수를 조회합니다 (API 절약)")
 with col_stars:
     auto_min_stars = st.number_input("최소 별 개수", min_value=1, max_value=5, value=5, step=1, label_visibility="collapsed")
@@ -1753,7 +1753,7 @@ manual_keywords = st.text_input(
 
 col_a, col_b = st.columns(2)
 with col_a:
-    min_search_pre = st.number_input("문서수 조회 최소 검색량 (API 절약)", min_value=0, value=2000, step=100,
+    min_search_pre = st.number_input("문서수 조회 최소 검색량 (API 절약)", min_value=0, value=1000, step=100,
                                      help="이 검색량 이상인 키워드만 블로그 문서수를 조회합니다")
 with col_b:
     min_stars_pre = st.number_input("최소 별 개수 (1~5)", min_value=1, max_value=5, value=5, step=1,

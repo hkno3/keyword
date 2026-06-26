@@ -597,12 +597,14 @@ if "bulk_title_versions" not in st.session_state:
 crawled_file_links = _load_crawled_links()
 groq_keys = [k for k in [groq_key, groq_key2] if k.strip()]
 
-col_cat, col_num, col_search, col_stars, col_btn1, col_btn2 = st.columns([2, 1, 1, 1, 1, 1])
+col_cat, col_source, col_num, col_search, col_stars, col_btn1, col_btn2 = st.columns([2, 1, 1, 1, 1, 1, 1])
 with col_cat:
     auto_category = st.selectbox("카테고리", [
         "건강", "부동산", "사업", "투자", "정부지원금",
         "보험", "대출", "법률", "세금", "육아출산", "여행", "반려동물",
     ], label_visibility="collapsed")
+with col_source:
+    auto_source = st.selectbox("소스", ["뉴스", "지식인"], label_visibility="collapsed")
 with col_num:
     auto_target = st.number_input("찾을 키워드 수", min_value=1, value=10, step=1, label_visibility="collapsed")
 with col_search:
@@ -621,7 +623,8 @@ if stop_btn:
 # 분석한 기사 기록 표시
 if st.session_state.auto_crawled:
     last = st.session_state.auto_crawled[-1]
-    st.caption(f"마지막 분석 기사: [{last['pubDate']}] {last['title']}")
+    _last_pd = f"[{last['pubDate']}] " if last.get("pubDate") else ""
+    st.caption(f"마지막 분석 기사: {_last_pd}{last['title']}")
 
 auto_table_box = st.empty()
 
@@ -670,11 +673,15 @@ if start_btn:
         naver_secret = os.getenv("NAVER_CLIENT_SECRET", "")
 
         # 기사 목록 (없으면 수집)
-        if not st.session_state.get(f"news_{auto_category}"):
-            with st.spinner(f"{auto_category} 기사 수집 중..."):
-                st.session_state[f"news_{auto_category}"] = news_fetcher.fetch_category_news(auto_category, max_total=1000)
+        _cache_key = f"{auto_source}_{auto_category}"
+        if not st.session_state.get(_cache_key):
+            with st.spinner(f"{auto_category} {auto_source} 수집 중..."):
+                if auto_source == "뉴스":
+                    st.session_state[_cache_key] = news_fetcher.fetch_category_news(auto_category, max_total=1000)
+                else:
+                    st.session_state[_cache_key] = news_fetcher.fetch_category_kin(auto_category, max_total=1000)
 
-        articles = st.session_state[f"news_{auto_category}"]
+        articles = st.session_state[_cache_key]
         crawled_links = _load_crawled_links()
         collected = list(st.session_state.auto_keywords)
         _existing_kws = set(_load_keywords_history().keys()) | set(_load_blacklist().keys())
@@ -697,8 +704,11 @@ if start_btn:
 
             status_box.info(f"🔍 [{article['pubDate']}] {article['title'][:50]}...")
 
-            # 크롤링
-            text = news_fetcher.scrape_article(article["link"])
+            # 본문 확보 (뉴스: 크롤링, 지식인: API description 그대로 사용)
+            if auto_source == "뉴스":
+                text = news_fetcher.scrape_article(article["link"])
+            else:
+                text = f"{article['title']}\n{article.get('description', '')}".strip()
             _save_crawled_link(article["link"])
             crawled_links.add(article["link"])
             st.session_state.auto_crawled.append({"link": article["link"], "pubDate": article["pubDate"], "title": article["title"]})

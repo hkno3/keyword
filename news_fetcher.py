@@ -208,6 +208,44 @@ def fetch_category_news(category: str, max_total: int = 1000) -> list[dict]:
     return results[:max_total]
 
 
+def _search_kin(query: str, display: int = 100) -> list[dict]:
+    try:
+        resp = requests.get(
+            "https://openapi.naver.com/v1/search/kin.json",
+            headers=_naver_headers(),
+            params={"query": query, "display": display, "sort": "date"},
+            timeout=8,
+        )
+        resp.raise_for_status()
+        return [
+            {
+                "title": _strip_html(item.get("title", "")),
+                "link": item.get("link", ""),
+                "description": _strip_html(item.get("description", "")),
+                "pubDate": "",
+                "type": "지식인",
+            }
+            for item in resp.json().get("items", [])
+        ]
+    except Exception:
+        return []
+
+
+def fetch_category_kin(category: str, max_total: int = 1000) -> list[dict]:
+    queries = CATEGORY_QUERIES.get(category, [])
+    seen = set()
+    results = []
+
+    for query in queries:
+        for item in _search_kin(query):
+            t = item["title"]
+            if t and t not in seen and _passes_filter(t, category):
+                seen.add(t)
+                results.append(item)
+
+    return results[:max_total]
+
+
 def scrape_article(url: str) -> str:
     if not url or "naver.com/blog" in url:
         return ""

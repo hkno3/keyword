@@ -2,7 +2,7 @@ import json
 import re
 from groq import Groq
 
-MODEL = "llama-3.3-70b-versatile"
+MODEL = "qwen/qwen3.6-27b"
 
 
 def extract_seed_keywords(article: str, client: Groq) -> tuple[list[str], int]:

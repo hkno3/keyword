@@ -10,6 +10,7 @@ def extract_seed_keywords(article: str, client: Groq) -> tuple[list[str], int]:
     response = client.chat.completions.create(
         model=MODEL,
         max_tokens=400,
+        reasoning_effort="none",
         messages=[{
             "role": "user",
             "content": f"""한국 블로그 SEO 전문가입니다.
@@ -48,6 +49,7 @@ def generate_title_single(keyword: str, client: Groq, summary: str = "") -> tupl
     response = client.chat.completions.create(
         model=MODEL,
         max_tokens=200,
+        reasoning_effort="none",
         messages=[{
             "role": "user",
             "content": f"""당신은 네이버 블로그 SEO 전문가입니다.
@@ -76,7 +78,7 @@ def generate_title_single(keyword: str, client: Groq, summary: str = "") -> tupl
     if not _valid(title):
         # 키워드가 제목 앞에 없으면 1회 재시도 (summary 없이)
         r2 = client.chat.completions.create(
-            model=MODEL, max_tokens=200,
+            model=MODEL, max_tokens=200, reasoning_effort="none",
             messages=[{"role": "user", "content":
                 f'키워드 "{keyword}"로 시작하는 한국어 블로그 제목 1개만 반환 (24~30자, 숫자 포함, 따옴표 없이):'}],
         )
@@ -93,6 +95,7 @@ def generate_titles(keyword: str, client: Groq) -> tuple[list[str], str, int]:
     response = client.chat.completions.create(
         model=MODEL,
         max_tokens=1200,
+        reasoning_effort="none",
         messages=[{
             "role": "user",
             "content": f"""당신은 네이버 블로그 SEO 전문가입니다.
@@ -252,6 +255,7 @@ JSON 외 다른 텍스트는 절대 출력하지 마세요.
         r = client.chat.completions.create(
             model=MODEL,
             max_tokens=4000,
+            reasoning_effort="none",
             messages=[{"role": "user", "content": p}],
         )
         t = r.usage.total_tokens if r.usage else 0

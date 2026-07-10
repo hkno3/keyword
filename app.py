@@ -826,6 +826,8 @@ st.subheader("🔎 황금 롱테일 키워드 (2차 검색)")
 
 if "longtail_table" not in st.session_state:
     st.session_state.longtail_table = []
+if "longtail_from_direct" not in st.session_state:
+    st.session_state.longtail_from_direct = False
 
 col_lt1, col_lt2 = st.columns([3, 1])
 with col_lt1:
@@ -838,12 +840,14 @@ auto_lt_btn = st.button("⭐ 황금 키워드로 롱테일 찾기", use_containe
 
 if auto_lt_btn:
     seed_kws = [r["keyword"] for r in st.session_state.auto_keywords]
+    st.session_state.longtail_from_direct = False
     _run_longtail(seed_kws)
     st.rerun()
 
 if direct_lt_btn:
     if direct_lt_input.strip():
         seed_kws = [k.strip() for k in direct_lt_input.split(",") if k.strip()]
+        st.session_state.longtail_from_direct = True
         _run_longtail(seed_kws)
         st.rerun()
     else:
@@ -874,15 +878,16 @@ if st.session_state.longtail_table:
 <style>button{{padding:8px 20px;background:#ff4b4b;color:white;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-family:sans-serif}}</style>
 """, height=50)
 
-    if st.button("📥 히스토리에 저장", use_container_width=True):
-        kws = [r for r in st.session_state.longtail_table if r.get("mobile_ctr", 0) >= 2]
-        added = _save_keywords_to_history(kws)
-        filtered_out = len(st.session_state.longtail_table) - len(kws)
-        msg = f"✅ {added}개 저장됨 (모바일 클릭률 2% 이상)"
-        if filtered_out:
-            msg += f" | {filtered_out}개 제외됨 (클릭률 미달)"
-        st.success(msg)
-        st.rerun()
+    if not st.session_state.get("longtail_from_direct"):
+        if st.button("📥 히스토리에 저장", use_container_width=True):
+            kws = [r for r in st.session_state.longtail_table if r.get("mobile_ctr", 0) >= 2]
+            added = _save_keywords_to_history(kws)
+            filtered_out = len(st.session_state.longtail_table) - len(kws)
+            msg = f"✅ {added}개 저장됨 (모바일 클릭률 2% 이상)"
+            if filtered_out:
+                msg += f" | {filtered_out}개 제외됨 (클릭률 미달)"
+            st.success(msg)
+            st.rerun()
 
 def _build_parent_groups(hist_kws: list, hist: dict):
     kw_set = set(hist_kws)

@@ -802,13 +802,10 @@ if start_btn:
             st.warning(f"기사를 다 돌았어요. {len(collected)}개 수집됨.")
 
         if collected:
-            # 부모(황금키워드) 먼저 히스토리 저장
-            _save_keywords_to_history([{**r, "is_parent": True} for r in collected])
-
             _run_longtail([r["keyword"] for r in collected])
+            _parent_map = st.session_state.get("longtail_parent_map", {})
+            child_rows = []
             if st.session_state.get("longtail_table"):
-                _parent_map = st.session_state.get("longtail_parent_map", {})
-                child_rows = []
                 for r in st.session_state.longtail_table:
                     if r.get("mobile_ctr", 0) >= 2 and r.get("stars", "") == "⭐⭐⭐⭐⭐":
                         child_row = dict(r)
@@ -816,8 +813,15 @@ if start_btn:
                         if parent_kw:
                             child_row["parent_keyword"] = parent_kw
                         child_rows.append(child_row)
+
+            # 자식이 있는 부모만 히스토리 저장
+            parents_with_children = {r["parent_keyword"] for r in child_rows if "parent_keyword" in r}
+            parents_to_save = [{**r, "is_parent": True} for r in collected if r["keyword"] in parents_with_children]
+            if parents_to_save:
+                _save_keywords_to_history(parents_to_save)
+            if child_rows:
                 added = _save_keywords_to_history(child_rows)
-                st.success(f"✅ 모바일 클릭률 2% 이상 키워드 {added}개 히스토리에 저장됐습니다.")
+                st.success(f"✅ 모바일 클릭률 2% 이상 별 5개 키워드 {added}개 히스토리에 저장됐습니다.")
         st.rerun()
 
 # ── 2차 검색: 황금 롱테일 키워드 ─────────────────────────

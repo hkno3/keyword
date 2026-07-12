@@ -810,7 +810,7 @@ if start_btn:
                 _parent_map = st.session_state.get("longtail_parent_map", {})
                 child_rows = []
                 for r in st.session_state.longtail_table:
-                    if r.get("mobile_ctr", 0) >= 2:
+                    if r.get("mobile_ctr", 0) >= 2 and r.get("stars", "") == "⭐⭐⭐⭐⭐":
                         child_row = dict(r)
                         parent_kw = _parent_map.get(r["keyword"])
                         if parent_kw:

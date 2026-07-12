@@ -604,7 +604,7 @@ with col_cat:
         "보험", "대출", "법률", "세금", "육아출산", "여행", "반려동물",
     ], label_visibility="collapsed")
 with col_source:
-    auto_source = st.selectbox("소스", ["뉴스", "지식인"], label_visibility="collapsed")
+    auto_source = st.selectbox("소스", ["뉴스", "지식인", "블로그", "카페", "웹문서"], label_visibility="collapsed")
 with col_num:
     auto_target = st.number_input("찾을 키워드 수", min_value=1, value=10, step=1)
 with col_search:
@@ -676,10 +676,14 @@ if start_btn:
         _cache_key = f"{auto_source}_{auto_category}"
         if not st.session_state.get(_cache_key):
             with st.spinner(f"{auto_category} {auto_source} 수집 중..."):
-                if auto_source == "뉴스":
-                    st.session_state[_cache_key] = news_fetcher.fetch_category_news(auto_category, max_total=1000)
-                else:
-                    st.session_state[_cache_key] = news_fetcher.fetch_category_kin(auto_category, max_total=1000)
+                _fetch_map = {
+                    "뉴스": news_fetcher.fetch_category_news,
+                    "지식인": news_fetcher.fetch_category_kin,
+                    "블로그": news_fetcher.fetch_category_blog,
+                    "카페": news_fetcher.fetch_category_cafe,
+                    "웹문서": news_fetcher.fetch_category_web,
+                }
+                st.session_state[_cache_key] = _fetch_map[auto_source](auto_category, max_total=1000)
 
         articles = st.session_state[_cache_key]
         crawled_links = _load_crawled_links()
@@ -704,7 +708,7 @@ if start_btn:
 
             status_box.info(f"🔍 [{article['pubDate']}] {article['title'][:50]}...")
 
-            # 본문 확보 (뉴스: 크롤링, 지식인: API description 그대로 사용)
+            # 본문 확보 (뉴스: 크롤링, 나머지: API title+description 사용)
             if auto_source == "뉴스":
                 text = news_fetcher.scrape_article(article["link"])
             else:

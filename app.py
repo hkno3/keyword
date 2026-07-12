@@ -606,12 +606,12 @@ with col_cat:
 with col_source:
     auto_source = st.selectbox("소스", ["뉴스", "지식인"], label_visibility="collapsed")
 with col_num:
-    auto_target = st.number_input("찾을 키워드 수", min_value=1, value=10, step=1, label_visibility="collapsed")
+    auto_target = st.number_input("찾을 키워드 수", min_value=1, value=10, step=1)
 with col_search:
-    auto_min_search = st.number_input("최소 검색량", min_value=0, value=1000, step=100, label_visibility="collapsed",
+    auto_min_search = st.number_input("최소 검색량", min_value=0, value=1000, step=100,
                                        help="이 검색량 이상인 키워드만 문서수를 조회합니다 (API 절약)")
 with col_stars:
-    auto_min_stars = st.number_input("최소 별 개수", min_value=1, max_value=5, value=5, step=1, label_visibility="collapsed")
+    auto_min_stars = st.number_input("최소 별 개수", min_value=1, max_value=5, value=5, step=1)
 with col_btn1:
     start_btn = st.button("🤖 자동 찾기", type="primary", use_container_width=True)
 with col_btn2:

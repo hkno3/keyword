@@ -604,9 +604,9 @@ with col_cat:
         "보험", "대출", "법률", "세금", "육아출산", "여행", "반려동물",
     ], label_visibility="collapsed")
 with col_source:
-    auto_source = st.selectbox("소스", ["뉴스", "지식인", "블로그", "카페", "웹문서"], label_visibility="collapsed")
+    auto_source = st.selectbox("소스", ["블로그", "뉴스", "지식인", "카페", "웹문서"], label_visibility="collapsed")
 with col_num:
-    auto_target = st.number_input("찾을 키워드 수", min_value=1, value=10, step=1)
+    auto_target = st.number_input("찾을 키워드 수", min_value=1, value=5, step=1)
 with col_search:
     auto_min_search = st.number_input("최소 검색량", min_value=0, value=1000, step=100,
                                        help="이 검색량 이상인 키워드만 문서수를 조회합니다 (API 절약)")
@@ -1005,13 +1005,13 @@ else:
         _first_dates = [_page_views.get(k, {}).get("first_tracked", "") for k, _, _, _ in _cum_data[:50]]
         _first_dates = [d for d in _first_dates if d]
         _since_str = f"  |  {min(_first_dates)}~" if _first_dates else ""
-        with st.expander(f"👁 누적 조회수 TOP 50  |  baw:{_cum_baw}  biz:{_cum_biz}{_since_str}", expanded=True):
+        with st.expander(f"👁 누적 조회수 TOP 50  |  baw:{_cum_baw}  biz:{_cum_biz}{_since_str}", expanded=False):
             _render_top50(_cum_data, "cum_vd", _pv_detail, {})
 
     if _today_data:
         _today_baw = sum(_page_views.get(k, {}).get("today_baw", 0) for k, _, _, _ in _today_data[:50])
         _today_biz = sum(_page_views.get(k, {}).get("today_biz", 0) for k, _, _, _ in _today_data[:50])
-        with st.expander(f"🌅 오늘 조회수 TOP 50  |  baw:{_today_baw}  biz:{_today_biz}", expanded=True):
+        with st.expander(f"🌅 오늘 조회수 TOP 50  |  baw:{_today_baw}  biz:{_today_biz}", expanded=False):
             _render_top50(_today_data, "today_vd", _pv_detail, {})
     _snapshots = _load_snapshots()
     if _snapshots:
@@ -1160,7 +1160,7 @@ else:
     with col_sort:
         _sort_options = ["가나다순", "검색량 높은 순", "문서수 낮은 순", "모바일 클릭률 높은 순", "별점 높은 순"]
         if "hist_sort" not in st.session_state:
-            st.session_state["hist_sort"] = "별점 높은 순"
+            st.session_state["hist_sort"] = "문서수 낮은 순"
         _prev_sort = st.session_state.get("hist_sort_prev", "별점 높은 순")
         _sort_by = st.selectbox("정렬", _sort_options, label_visibility="collapsed", key="hist_sort")
         if _sort_by != _prev_sort:

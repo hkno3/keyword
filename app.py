@@ -18,7 +18,8 @@ import sitemap_service
 
 load_dotenv()
 
-CRAWLED_FILE = os.path.join(os.path.dirname(__file__), "crawled_links.json")
+CRAWLED_FILE = os.path.join(os.path.dirname(__file__), "crawled_links.txt")
+_CRAWLED_FILE_OLD = os.path.join(os.path.dirname(__file__), "crawled_links.json")
 KEYWORDS_HISTORY_FILE = os.path.join(os.path.dirname(__file__), "keywords_history.json")
 KEYWORDS_BLACKLIST_FILE = os.path.join(os.path.dirname(__file__), "keywords_blacklist.json")
 MEMO_FILE = os.path.join(os.path.dirname(__file__), "memo.txt")
@@ -229,17 +230,27 @@ def _save_keywords_to_history(rows: list):
     return added
 
 def _load_crawled_links() -> set:
+    result = set()
+    # 구형 JSON 파일 자동 마이그레이션
+    if os.path.exists(_CRAWLED_FILE_OLD):
+        try:
+            with open(_CRAWLED_FILE_OLD, "r", encoding="utf-8") as f:
+                result = set(json.load(f))
+            with open(CRAWLED_FILE, "w", encoding="utf-8") as f:
+                f.write("\n".join(result))
+            os.remove(_CRAWLED_FILE_OLD)
+        except Exception:
+            pass
+        return result
     try:
         with open(CRAWLED_FILE, "r", encoding="utf-8") as f:
-            return set(json.load(f))
+            return set(line.strip() for line in f if line.strip())
     except Exception:
         return set()
 
 def _save_crawled_link(link: str):
-    links = _load_crawled_links()
-    links.add(link)
-    with open(CRAWLED_FILE, "w", encoding="utf-8") as f:
-        json.dump(list(links), f, ensure_ascii=False)
+    with open(CRAWLED_FILE, "a", encoding="utf-8") as f:
+        f.write(link + "\n")
 
 st.set_page_config(page_title="수익형 키워드 분석기", page_icon="🔍", layout="wide")
 st.title("🔍 수익형 키워드 분석기")
@@ -281,8 +292,9 @@ with st.sidebar:
     crawled_count = len(_load_crawled_links())
     st.caption(f"크롤링 기록: {crawled_count}개 기사")
     if st.button("🗑️ 크롤링 기록 초기화"):
-        if os.path.exists(CRAWLED_FILE):
-            os.remove(CRAWLED_FILE)
+        for _f in [CRAWLED_FILE, _CRAWLED_FILE_OLD]:
+            if os.path.exists(_f):
+                os.remove(_f)
         st.session_state.auto_crawled = []
         st.rerun()
     st.divider()

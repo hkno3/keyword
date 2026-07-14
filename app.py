@@ -1194,8 +1194,10 @@ else:
         if st.button("📂 모두 접기" if _all_exp else "📂 모두 펼치기", use_container_width=True):
             _new_exp = not _all_exp
             st.session_state["hist_all_expand"] = _new_exp
-            for _k in _hist_kws:
-                st.session_state[f"hist_grp_exp_{_k}"] = _new_exp
+            if not _new_exp:
+                for _k in list(st.session_state.keys()):
+                    if _k.startswith("hist_grp_exp_"):
+                        del st.session_state[_k]
             st.rerun()
 
     if _sort_by == "검색량 높은 순":
@@ -1238,7 +1240,7 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
         else:
             _pk_list = sorted(_groups.keys())
 
-        _PAGE_SIZE = 100
+        _PAGE_SIZE = 30 if _all_exp else 100
         _total_pks = len(_pk_list)
         _total_pages = max(1, (_total_pks + _PAGE_SIZE - 1) // _PAGE_SIZE)
         _cur_page = st.session_state.get("hist_page", 0)
@@ -1268,7 +1270,7 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
                     _pk_stat = "|".join(s for s in [str(_pk_ts), str(_pk_dc), _pk_ctr_s, _pk_star_s, _pk_ci] if s) if _pk_ts != "" else ""
                     if _pk_vs:
                         _pk_stat = (_pk_stat + "|" if _pk_stat else "") + _pk_vs
-                    _pk_exp = st.session_state.get(f"hist_grp_exp_{_pk}", False)
+                    _pk_exp = st.session_state.get(f"hist_grp_exp_{_pk}", _all_exp)
                     pc1, pc2, pc3, pc4, pc5 = st.columns([1, 5, 1, 1, 1])
                     with pc1:
                         st.checkbox("", key=f"hist_chk_{_pk}", label_visibility="collapsed")

@@ -1183,7 +1183,7 @@ else:
     with col_sort:
         _sort_options = ["가나다순", "검색량 높은 순", "문서수 낮은 순", "모바일 클릭률 높은 순", "별점 높은 순", "매우높음+검색량 높은 순"]
         if "hist_sort" not in st.session_state:
-            st.session_state["hist_sort"] = "문서수 낮은 순"
+            st.session_state["hist_sort"] = "매우높음+검색량 높은 순"
         _prev_sort = st.session_state.get("hist_sort_prev", "별점 높은 순")
         _sort_by = st.selectbox("정렬", _sort_options, label_visibility="collapsed", key="hist_sort")
         if _sort_by != _prev_sort:

@@ -1183,7 +1183,7 @@ else:
     with col_sort:
         _sort_options = ["가나다순", "검색량 높은 순", "문서수 낮은 순", "모바일 클릭률 높은 순", "별점 높은 순", "매우높음+검색량 높은 순"]
         if "hist_sort" not in st.session_state:
-            st.session_state["hist_sort"] = "문서수 낮은 순"
+            st.session_state["hist_sort"] = "매우높음+검색량 높은 순"
         _prev_sort = st.session_state.get("hist_sort_prev", "별점 높은 순")
         _sort_by = st.selectbox("정렬", _sort_options, label_visibility="collapsed", key="hist_sort")
         if _sort_by != _prev_sort:
@@ -1264,7 +1264,8 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
                     _pk_sc = _hist[_pk].get("star_count", "")
                     _pk_star_s = f"⭐{_pk_sc}" if _pk_sc != "" else ""
                     _pk_vs = _get_view_str(_pk, _page_views)
-                    _pk_stat = "|".join(s for s in [str(_pk_ts), str(_pk_dc), _pk_ctr_s, _pk_star_s] if s) if _pk_ts != "" else ""
+                    _pk_ci = _hist[_pk].get("comp_idx", "")
+                    _pk_stat = "|".join(s for s in [str(_pk_ts), str(_pk_dc), _pk_ctr_s, _pk_star_s, _pk_ci] if s) if _pk_ts != "" else ""
                     if _pk_vs:
                         _pk_stat = (_pk_stat + "|" if _pk_stat else "") + _pk_vs
                     _pk_exp = st.session_state.get(f"hist_grp_exp_{_pk}", False)
@@ -1309,7 +1310,8 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
                             _ck_sc = _hist[_ck].get("star_count", "")
                             _ck_star_s = f"⭐{_ck_sc}" if _ck_sc != "" else ""
                             _ck_vs = _get_view_str(_ck, _page_views)
-                            _ck_stat = "|".join(s for s in [str(_ck_ts), str(_ck_dc), _ck_ctr_s, _ck_star_s] if s) if _ck_ts != "" else ""
+                            _ck_ci = _hist[_ck].get("comp_idx", "")
+                            _ck_stat = "|".join(s for s in [str(_ck_ts), str(_ck_dc), _ck_ctr_s, _ck_star_s, _ck_ci] if s) if _ck_ts != "" else ""
                             if _ck_vs:
                                 _ck_stat = (_ck_stat + "|" if _ck_stat else "") + _ck_vs
                             cc1, cc2, cc3 = st.columns([1, 7, 1])

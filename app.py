@@ -218,6 +218,8 @@ def _save_keywords_to_history(rows: list):
                     entry["mobile_ctr"] = row["mobile_ctr"]
                 if "stars" in row:
                     entry["star_count"] = len(row["stars"])
+                if "comp_idx" in row:
+                    entry["comp_idx"] = row["comp_idx"]
                 if row.get("is_parent"):
                     entry["is_parent"] = True
                 if row.get("parent_keyword"):
@@ -989,7 +991,8 @@ else:
             dc = _hist[kw].get("doc_count", "")
             ctr = _hist[kw].get("mobile_ctr", "")
             sc = _hist[kw].get("star_count", "")
-            stat = "|".join(s for s in [str(ts), str(dc), f"{ctr:.2f}" if ctr != "" else "", f"⭐{sc}" if sc != "" else ""] if s)
+            ci = _hist[kw].get("comp_idx", "")
+            stat = "|".join(s for s in [str(ts), str(dc), f"{ctr:.2f}" if ctr != "" else "", f"⭐{sc}" if sc != "" else "", ci] if s)
             data.append((kw, total, stat, vs))
         data.sort(key=lambda x: x[1], reverse=True)
         return data
@@ -1050,6 +1053,12 @@ else:
         _pk_list_pre = sorted(_groups_pre.keys(), key=lambda k: _hist[k].get("mobile_ctr", 0), reverse=True)
     elif _sort_pre == "별점 높은 순":
         _pk_list_pre = sorted(_groups_pre.keys(), key=lambda k: _hist[k].get("star_count", 0), reverse=True)
+    elif _sort_pre == "매우높음+검색량 높은 순":
+        _comp_rank = {"매우높음": 5, "높음": 4, "보통": 3, "낮음": 2, "매우낮음": 1}
+        _pk_list_pre = sorted(_groups_pre.keys(), key=lambda k: (
+            _comp_rank.get(_hist[k].get("comp_idx", ""), 0),
+            _hist[k].get("total_search", 0)
+        ), reverse=True)
     else:
         _pk_list_pre = sorted(_groups_pre.keys())
     _PAGE_SIZE_PRE = 100
@@ -1099,6 +1108,8 @@ else:
                     _hist[kw]["mobile_ctr"] = vol.get("mobile_ctr", 0)
                     _, stars, _ = naver_api.competition_level(vol.get("total_search", 0), doc)
                     _hist[kw]["star_count"] = len(stars)
+                    if vol.get("comp_idx"):
+                        _hist[kw]["comp_idx"] = vol["comp_idx"]
                     _updated += 1
             if "__meta__" not in _hist:
                 _hist["__meta__"] = {}
@@ -1170,7 +1181,7 @@ else:
                     _w.writerow([_today, _kw, _v.get("baw", 0), _v.get("biz", 0)])
             st.toast(f"✅ {len(_snap_views)}개 키워드 스냅샷 저장 완료!")
     with col_sort:
-        _sort_options = ["가나다순", "검색량 높은 순", "문서수 낮은 순", "모바일 클릭률 높은 순", "별점 높은 순"]
+        _sort_options = ["가나다순", "검색량 높은 순", "문서수 낮은 순", "모바일 클릭률 높은 순", "별점 높은 순", "매우높음+검색량 높은 순"]
         if "hist_sort" not in st.session_state:
             st.session_state["hist_sort"] = "문서수 낮은 순"
         _prev_sort = st.session_state.get("hist_sort_prev", "별점 높은 순")

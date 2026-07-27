@@ -311,6 +311,12 @@ with st.sidebar:
                 os.remove(_f)
         st.session_state.auto_crawled = []
         st.rerun()
+    nodaji_crawled_count = len(_load_crawled_links_nodaji())
+    st.caption(f"노다지 크롤링 기록: {nodaji_crawled_count}개 기사")
+    if st.button("🗑️ 노다지 크롤링 기록 초기화"):
+        if os.path.exists(CRAWLED_FILE_NODAJI):
+            os.remove(CRAWLED_FILE_NODAJI)
+        st.rerun()
     st.divider()
     st.markdown(f"**🤖 Groq 사용량 (오늘 {datetime.now().strftime('%m/%d')})**")
     used_key = st.session_state.get("groq_key_idx", 0) + 1

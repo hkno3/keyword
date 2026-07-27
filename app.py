@@ -843,6 +843,192 @@ if start_btn:
                 st.success(f"✅ 모바일 클릭률 2% 이상 별 5개 키워드 {added}개 히스토리에 저장됐습니다.")
         st.rerun()
 
+# ── 노다지 키워드 찾기 ─────────────────────────────────────
+st.divider()
+st.subheader("💎 노다지 키워드 찾기")
+st.caption("광고·뉴스·블로그 경쟁 없는 키워드 자동 발굴 (필터 조건 없음, 전체 저장)")
+
+for key in ["nodaji_keywords", "nodaji_running"]:
+    if key not in st.session_state:
+        st.session_state[key] = [] if key != "nodaji_running" else False
+
+col_nd1, col_nd2, col_nd3 = st.columns([1, 1, 1])
+with col_nd1:
+    nodaji_target = st.number_input("찾을 키워드 수", min_value=1, value=5, step=1, key="nodaji_target_input")
+with col_nd2:
+    nd_start_btn = st.button("💎 노다지 자동 찾기", type="primary", use_container_width=True)
+with col_nd3:
+    nd_stop_btn = st.button("⏹ 스탑", key="nd_stop", use_container_width=True)
+
+if nd_stop_btn:
+    st.session_state.nodaji_running = False
+
+nodaji_table_box = st.empty()
+
+def _render_nodaji_table(keywords):
+    if not keywords:
+        return
+    nd_df = pd.DataFrame([{
+        "키워드": r["keyword"],
+        "검색": f"https://search.naver.com/search.naver?query={r['keyword']}",
+        "월검색(합계)": f"{r['total_search']:,}",
+        "클릭률_모바일": f"{r['mobile_ctr']}%",
+        "경쟁정도(AD)": r.get("comp_idx", "N/A"),
+        "문서수": f"{r['doc_count']:,}",
+        "추천도": r["stars"],
+        "뉴스": "없음",
+        "블로그": "없음",
+    } for r in keywords])
+    with nodaji_table_box.container():
+        st.success(f"💎 {len(keywords)}개 노다지 키워드 발굴!")
+        st.dataframe(nd_df, hide_index=True, use_container_width=True,
+                     column_config={"검색": st.column_config.LinkColumn("검색", display_text="🔍 네이버")})
+
+_render_nodaji_table(st.session_state.nodaji_keywords)
+
+if nd_start_btn:
+    if not groq_key:
+        st.error("Groq API 키를 입력해주세요.")
+    else:
+        st.session_state.nodaji_running = True
+        st.session_state.nodaji_keywords = []
+        _nd_groq_idx = 0
+        _nd_groq_client = Groq(api_key=groq_keys[0])
+        customer_id = os.getenv("NAVER_AD_CUSTOMER_ID", "")
+        ad_key = os.getenv("NAVER_AD_API_KEY", "")
+        ad_secret = os.getenv("NAVER_AD_SECRET_KEY", "")
+        naver_id = os.getenv("NAVER_CLIENT_ID", "")
+        naver_secret = os.getenv("NAVER_CLIENT_SECRET", "")
+        _LOW_COMP = {"매우낮음", "낮음", "N/A", ""}
+
+        _nd_cache_key = f"{auto_source}_{auto_category}"
+        if not st.session_state.get(_nd_cache_key):
+            with st.spinner(f"{auto_category} {auto_source} 수집 중..."):
+                _fetch_map2 = {
+                    "뉴스": news_fetcher.fetch_category_news,
+                    "지식인": news_fetcher.fetch_category_kin,
+                    "블로그": news_fetcher.fetch_category_blog,
+                    "카페": news_fetcher.fetch_category_cafe,
+                    "웹문서": news_fetcher.fetch_category_web,
+                }
+                st.session_state[_nd_cache_key] = _fetch_map2[auto_source](auto_category, max_total=1000)
+
+        _nd_articles = st.session_state[_nd_cache_key]
+        _nd_crawled = _load_crawled_links()
+        _nd_collected = []
+        _nd_collected_kws = set(_load_keywords_history().keys()) | set(_load_blacklist().keys())
+
+        nd_status = st.empty()
+        nd_progress = st.progress(0)
+
+        for _nd_article in _nd_articles:
+            if not st.session_state.nodaji_running:
+                break
+            if len(_nd_collected) >= nodaji_target:
+                break
+            if _nd_article["link"] in _nd_crawled:
+                continue
+            if not _is_relevant_article(_nd_article["title"], auto_category):
+                continue
+
+            nd_status.info(f"🔍 [{_nd_article.get('pubDate','')}] {_nd_article['title'][:50]}...")
+
+            if auto_source == "뉴스":
+                _nd_text = news_fetcher.scrape_article(_nd_article["link"])
+            else:
+                _nd_text = f"{_nd_article['title']}\n{_nd_article.get('description', '')}".strip()
+            _save_crawled_link(_nd_article["link"])
+            _nd_crawled.add(_nd_article["link"])
+
+            if not _nd_text:
+                continue
+
+            try:
+                _nd_seeds, _nd_tokens = claude_service.extract_seed_keywords(_nd_text, _nd_groq_client)
+                _add_groq_tokens(_nd_tokens)
+                _nd_seeds = [s for s in _nd_seeds if len(s.strip()) >= 2]
+            except Exception as _nd_e:
+                _nd_err = str(_nd_e)
+                if "429" in _nd_err or "rate_limit" in _nd_err.lower():
+                    _nd_groq_idx += 1
+                    if _nd_groq_idx < len(groq_keys):
+                        _nd_groq_client = Groq(api_key=groq_keys[_nd_groq_idx])
+                        try:
+                            _nd_seeds, _nd_tokens = claude_service.extract_seed_keywords(_nd_text, _nd_groq_client)
+                            _add_groq_tokens(_nd_tokens)
+                            _nd_seeds = [s for s in _nd_seeds if len(s.strip()) >= 2]
+                        except Exception:
+                            continue
+                    else:
+                        nd_status.error("🚫 모든 Groq API 키 한도 초과.")
+                        st.session_state.nodaji_running = False
+                        break
+                else:
+                    continue
+
+            if not _nd_seeds:
+                continue
+
+            nd_status.info(f"📊 검색량 조회 중: {', '.join(_nd_seeds[:3])}...")
+            _nd_vol_data = naver_api.get_search_volumes_batch(_nd_seeds, customer_id, ad_key, ad_secret)
+
+            for _nd_kw, _nd_vol in _nd_vol_data.items():
+                if not st.session_state.nodaji_running:
+                    break
+                if len(_nd_collected) >= nodaji_target:
+                    break
+                if _nd_kw in _nd_collected_kws:
+                    continue
+                _nd_comp = _nd_vol.get("comp_idx", "")
+                if _nd_comp not in _LOW_COMP:
+                    continue
+                nd_status.info(f"📰 뉴스 체크: {_nd_kw}")
+                if news_fetcher.has_news(_nd_kw):
+                    continue
+                nd_status.info(f"📝 블로그 체크: {_nd_kw}")
+                if news_fetcher.has_blog(_nd_kw):
+                    continue
+                nd_status.info(f"💎 노다지 발견! {_nd_kw} — 문서수 조회 중...")
+                _nd_doc = naver_api.get_doc_counts_parallel([_nd_kw], naver_id, naver_secret).get(_nd_kw, 0)
+                _nd_row = naver_api.build_keyword_table({_nd_kw: _nd_vol}, {_nd_kw: _nd_doc})
+                if _nd_row:
+                    _nd_r = dict(_nd_row[0])
+                    _nd_r["source_title"] = _nd_article["title"]
+                    _nd_r["source_article"] = _nd_text[:2000]
+                    _nd_collected.append(_nd_r)
+                    _nd_collected_kws.add(_nd_kw)
+
+            st.session_state.nodaji_keywords = _nd_collected
+            nd_progress.progress(min(len(_nd_collected) / nodaji_target, 1.0))
+            _render_nodaji_table(_nd_collected)
+
+        st.session_state.nodaji_running = False
+        nd_status.empty()
+        nd_progress.empty()
+
+        if _nd_collected:
+            st.success(f"💎 노다지 키워드 {len(_nd_collected)}개 발굴 완료!")
+            _run_longtail([r["keyword"] for r in _nd_collected])
+            _nd_parent_map = st.session_state.get("longtail_parent_map", {})
+            _nd_child_rows = []
+            if st.session_state.get("longtail_table"):
+                for _nd_lt in st.session_state.longtail_table:
+                    _nd_child = dict(_nd_lt)
+                    _nd_pk = _nd_parent_map.get(_nd_lt["keyword"])
+                    if _nd_pk:
+                        _nd_child["parent_keyword"] = _nd_pk
+                    _nd_child_rows.append(_nd_child)
+            _nd_parents_with_ch = {r.get("parent_keyword") for r in _nd_child_rows if r.get("parent_keyword")}
+            _nd_parents_save = [{**r, "is_parent": True} for r in _nd_collected if r["keyword"] in _nd_parents_with_ch]
+            if _nd_parents_save:
+                _save_keywords_to_history(_nd_parents_save)
+            if _nd_child_rows:
+                _nd_added = _save_keywords_to_history(_nd_child_rows)
+                st.success(f"✅ 롱테일 키워드 {_nd_added}개 히스토리에 저장됐습니다.")
+        else:
+            st.warning("노다지 키워드를 찾지 못했어요. 다른 카테고리/소스를 시도해보세요.")
+        st.rerun()
+
 # ── 2차 검색: 황금 롱테일 키워드 ─────────────────────────
 st.divider()
 st.subheader("🔎 황금 롱테일 키워드 (2차 검색)")

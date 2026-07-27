@@ -852,12 +852,14 @@ for key in ["nodaji_keywords", "nodaji_running"]:
     if key not in st.session_state:
         st.session_state[key] = [] if key != "nodaji_running" else False
 
-col_nd1, col_nd2, col_nd3 = st.columns([1, 1, 1])
+col_nd1, col_nd2, col_nd3, col_nd4 = st.columns([1, 1, 1, 1])
 with col_nd1:
     nodaji_target = st.number_input("찾을 키워드 수", min_value=1, value=5, step=1, key="nodaji_target_input")
 with col_nd2:
-    nd_start_btn = st.button("💎 노다지 자동 찾기", type="primary", use_container_width=True)
+    nodaji_source = st.selectbox("소스", ["블로그", "뉴스", "지식인", "카페", "웹문서"], key="nodaji_source")
 with col_nd3:
+    nd_start_btn = st.button("💎 노다지 자동 찾기", type="primary", use_container_width=True)
+with col_nd4:
     nd_stop_btn = st.button("⏹ 스탑", key="nd_stop", use_container_width=True)
 
 if nd_stop_btn:
@@ -901,9 +903,9 @@ if nd_start_btn:
         naver_secret = os.getenv("NAVER_CLIENT_SECRET", "")
         _LOW_COMP = {"매우낮음", "낮음", "N/A", ""}
 
-        _nd_cache_key = f"{auto_source}_{auto_category}"
+        _nd_cache_key = f"{nodaji_source}_{auto_category}"
         if not st.session_state.get(_nd_cache_key):
-            with st.spinner(f"{auto_category} {auto_source} 수집 중..."):
+            with st.spinner(f"{auto_category} {nodaji_source} 수집 중..."):
                 _fetch_map2 = {
                     "뉴스": news_fetcher.fetch_category_news,
                     "지식인": news_fetcher.fetch_category_kin,
@@ -911,7 +913,7 @@ if nd_start_btn:
                     "카페": news_fetcher.fetch_category_cafe,
                     "웹문서": news_fetcher.fetch_category_web,
                 }
-                st.session_state[_nd_cache_key] = _fetch_map2[auto_source](auto_category, max_total=1000)
+                st.session_state[_nd_cache_key] = _fetch_map2[nodaji_source](auto_category, max_total=1000)
 
         _nd_articles = st.session_state[_nd_cache_key]
         _nd_crawled = _load_crawled_links()
@@ -933,7 +935,7 @@ if nd_start_btn:
 
             nd_status.info(f"🔍 [{_nd_article.get('pubDate','')}] {_nd_article['title'][:50]}...")
 
-            if auto_source == "뉴스":
+            if nodaji_source == "뉴스":
                 _nd_text = news_fetcher.scrape_article(_nd_article["link"])
             else:
                 _nd_text = f"{_nd_article['title']}\n{_nd_article.get('description', '')}".strip()
@@ -978,6 +980,8 @@ if nd_start_btn:
                 if len(_nd_collected) >= nodaji_target:
                     break
                 if _nd_kw in _nd_collected_kws:
+                    continue
+                if _nd_vol.get("total_search", 0) < 500:
                     continue
                 _nd_comp = _nd_vol.get("comp_idx", "")
                 if _nd_comp not in _LOW_COMP:

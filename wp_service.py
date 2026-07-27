@@ -41,7 +41,9 @@ def publish_post(site: dict, post_data: dict, pub_status: str = "draft", schedul
         "title": post_data["title"],
         "content": post_data["content"],
         "status": pub_status,
+        "date": post_data.get("post_date", ""),
         "tags": tag_ids,
+        "categories": [post_data["category_id"]] if post_data.get("category_id") else [],
         "meta": {
             "_yoast_wpseo_metadesc": post_data.get("meta_description", ""),
             "_yoast_wpseo_focuskw": post_data.get("focus_keyword", ""),

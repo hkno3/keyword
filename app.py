@@ -637,7 +637,7 @@ with col_cat:
         "보험", "대출", "법률", "세금", "육아출산", "여행", "반려동물", "생활정보",
     ], label_visibility="collapsed")
 with col_source:
-    auto_source = st.selectbox("소스", ["블로그", "뉴스", "지식인", "카페", "웹문서"], label_visibility="collapsed")
+    auto_source = st.selectbox("소스", ["블로그", "뉴스", "지식인", "카페", "웹문서", "정부+해외"], label_visibility="collapsed")
 with col_num:
     auto_target = st.number_input("찾을 키워드 수", min_value=1, value=5, step=1)
 with col_search:
@@ -709,14 +709,19 @@ if start_btn:
         _cache_key = f"{auto_source}_{auto_category}"
         if not st.session_state.get(_cache_key):
             with st.spinner(f"{auto_category} {auto_source} 수집 중..."):
-                _fetch_map = {
-                    "뉴스": news_fetcher.fetch_category_news,
-                    "지식인": news_fetcher.fetch_category_kin,
-                    "블로그": news_fetcher.fetch_category_blog,
-                    "카페": news_fetcher.fetch_category_cafe,
-                    "웹문서": news_fetcher.fetch_category_web,
-                }
-                st.session_state[_cache_key] = _fetch_map[auto_source](auto_category, max_total=1000)
+                if auto_source == "정부+해외":
+                    _govt = news_fetcher.fetch_government_rss(300)
+                    _overseas = news_fetcher.fetch_overseas_news_rss(200)
+                    st.session_state[_cache_key] = _govt + _overseas
+                else:
+                    _fetch_map = {
+                        "뉴스": news_fetcher.fetch_category_news,
+                        "지식인": news_fetcher.fetch_category_kin,
+                        "블로그": news_fetcher.fetch_category_blog,
+                        "카페": news_fetcher.fetch_category_cafe,
+                        "웹문서": news_fetcher.fetch_category_web,
+                    }
+                    st.session_state[_cache_key] = _fetch_map[auto_source](auto_category, max_total=1000)
 
         articles = st.session_state[_cache_key]
         crawled_links = _load_crawled_links()
@@ -735,8 +740,9 @@ if start_btn:
             if article["link"] in crawled_links:
                 continue
 
-            # 제목 관련성 체크 (API 호출 없이)
-            if not _is_relevant_article(article["title"], auto_category):
+            # 제목 관련성 체크 (API 호출 없이) — 해외 영어 기사는 한국어 필터 패스
+            _article_is_overseas = article.get("type") == "해외뉴스"
+            if not _article_is_overseas and not _is_relevant_article(article["title"], auto_category):
                 continue
 
             status_box.info(f"🔍 [{article['pubDate']}] {article['title'][:50]}...")
@@ -755,8 +761,9 @@ if start_btn:
                 continue
 
             # AI 씨드 추출
+            _extract_fn = claude_service.extract_keywords_from_english if _article_is_overseas else claude_service.extract_seed_keywords
             try:
-                seeds, tokens = claude_service.extract_seed_keywords(text, groq_client)
+                seeds, tokens = _extract_fn(text, groq_client)
                 _add_groq_tokens(tokens)
                 st.session_state.groq_key_idx = groq_key_idx
                 seeds = [s for s in seeds if len(s.strip()) >= 2]
@@ -769,7 +776,7 @@ if start_btn:
                         st.session_state.groq_key_idx = groq_key_idx
                         status_box.warning(f"⚠️ Key {groq_key_idx} 한도 초과 → Key {groq_key_idx + 1}로 전환")
                         try:
-                            seeds, tokens = claude_service.extract_seed_keywords(text, groq_client)
+                            seeds, tokens = _extract_fn(text, groq_client)
                             _add_groq_tokens(tokens)
                             seeds = [s for s in seeds if len(s.strip()) >= 2]
                         except Exception:
@@ -905,6 +912,14 @@ def _render_nodaji_table(keywords):
 
 _render_nodaji_table(st.session_state.nodaji_keywords)
 
+if st.session_state.get("nodaji_pending_save"):
+    if st.button("📥 노다지 키워드 히스토리에 추가", type="primary", use_container_width=True):
+        _nd_to_save = [{**r, "is_parent": True} for r in st.session_state["nodaji_pending_save"]]
+        _nd_saved = _save_keywords_to_history(_nd_to_save)
+        st.session_state["nodaji_pending_save"] = []
+        st.success(f"✅ 노다지 키워드 {_nd_saved}개 히스토리에 부모 키워드로 저장됐습니다.")
+        st.rerun()
+
 if nd_start_btn:
     if not groq_key:
         st.error("Groq API 키를 입력해주세요.")
@@ -1028,6 +1043,7 @@ if nd_start_btn:
 
         if _nd_collected:
             st.success(f"💎 노다지 키워드 {len(_nd_collected)}개 발굴 완료!")
+            st.session_state["nodaji_pending_save"] = _nd_collected
             _run_longtail([r["keyword"] for r in _nd_collected])
             _nd_parent_map = st.session_state.get("longtail_parent_map", {})
             _nd_child_rows = []

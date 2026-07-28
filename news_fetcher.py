@@ -2,6 +2,7 @@ import os
 import re
 import email.utils
 import requests
+import xml.etree.ElementTree as ET
 from bs4 import BeautifulSoup
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
@@ -459,3 +460,78 @@ def has_news(keyword: str) -> bool:
 
 def has_blog(keyword: str) -> bool:
     return len(_search_api(keyword, "blog", "블로그", display=1)) > 0
+
+
+# ── 정부 RSS ──────────────────────────────────────────────
+GOVT_RSS_URLS = [
+    "https://www.korea.kr/rss/policy.xml",
+    "https://www.korea.kr/rss/reporter.xml",
+    "https://www.korea.kr/rss/column.xml",
+    "https://www.korea.kr/rss/insight.xml",
+    "https://www.korea.kr/rss/media.xml",
+    "https://www.korea.kr/rss/shorts.xml",
+    "https://www.korea.kr/rss/visual.xml",
+    "https://www.korea.kr/rss/photo.xml",
+    "https://www.korea.kr/rss/cartoon.xml",
+    "https://www.korea.kr/rss/pressrelease.xml",
+    "https://www.korea.kr/rss/fact.xml",
+    "https://www.korea.kr/rss/ebriefing.xml",
+    "https://www.korea.kr/rss/president.xml",
+    "https://www.korea.kr/rss/cabinet.xml",
+    "https://www.korea.kr/rss/speech.xml",
+    "https://www.korea.kr/rss/expdoc.xml",
+    "https://www.korea.kr/rss/archive.xml",
+]
+
+# ── 해외 뉴스 RSS ──────────────────────────────────────────
+OVERSEAS_RSS_URLS = [
+    "https://news.google.com/rss/headlines/section/topic/HEALTH?hl=en-US&gl=US&ceid=US:en",
+    "https://news.google.com/rss/headlines/section/topic/BUSINESS?hl=en-US&gl=US&ceid=US:en",
+    "https://news.google.com/rss/headlines/section/topic/TECHNOLOGY?hl=en-US&gl=US&ceid=US:en",
+    "https://news.google.com/rss/headlines/section/topic/SCIENCE?hl=en-US&gl=US&ceid=US:en",
+    "https://news.google.com/rss/headlines/section/topic/WORLD?hl=en-US&gl=US&ceid=US:en",
+]
+
+
+def _parse_rss(url: str, article_type: str = "RSS") -> list[dict]:
+    try:
+        resp = requests.get(url, headers=HEADERS, timeout=10)
+        resp.raise_for_status()
+        root = ET.fromstring(resp.content)
+        items = []
+        for item in root.findall(".//item"):
+            title = _strip_html(item.findtext("title", ""))
+            link = item.findtext("link", "")
+            desc = _strip_html(item.findtext("description", ""))
+            pub_date = _parse_date(item.findtext("pubDate", ""))
+            if title:
+                items.append({
+                    "title": title,
+                    "link": link,
+                    "description": desc,
+                    "pubDate": pub_date,
+                    "type": article_type,
+                })
+        return items
+    except Exception:
+        return []
+
+
+def fetch_government_rss(max_total: int = 300) -> list[dict]:
+    seen, results = set(), []
+    for url in GOVT_RSS_URLS:
+        for item in _parse_rss(url, "정부RSS"):
+            if item["title"] not in seen:
+                seen.add(item["title"])
+                results.append(item)
+    return results[:max_total]
+
+
+def fetch_overseas_news_rss(max_total: int = 200) -> list[dict]:
+    seen, results = set(), []
+    for url in OVERSEAS_RSS_URLS:
+        for item in _parse_rss(url, "해외뉴스"):
+            if item["title"] not in seen:
+                seen.add(item["title"])
+                results.append(item)
+    return results[:max_total]

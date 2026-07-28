@@ -691,12 +691,37 @@ def _render_auto_table(keywords):
 
 _render_auto_table(st.session_state.auto_keywords)
 
+if st.session_state.get("auto_save_pending") and st.session_state.auto_keywords and not st.session_state.auto_running:
+    if st.button("📥 롱테일 찾기 + 히스토리 저장", type="primary", use_container_width=True):
+        _pending = st.session_state.auto_keywords
+        _run_longtail([r["keyword"] for r in _pending])
+        _p_map = st.session_state.get("longtail_parent_map", {})
+        _p_child_rows = []
+        if st.session_state.get("longtail_table"):
+            for r in st.session_state.longtail_table:
+                if r.get("mobile_ctr", 0) >= 2 and r.get("stars", "") == "⭐⭐⭐⭐⭐":
+                    _cr = dict(r)
+                    _pk = _p_map.get(r["keyword"])
+                    if _pk:
+                        _cr["parent_keyword"] = _pk
+                    _p_child_rows.append(_cr)
+        _p_parents_with_ch = {r["parent_keyword"] for r in _p_child_rows if "parent_keyword" in r}
+        _p_parents_save = [{**r, "is_parent": True} for r in _pending if r["keyword"] in _p_parents_with_ch]
+        if _p_parents_save:
+            _save_keywords_to_history(_p_parents_save)
+        if _p_child_rows:
+            _p_added = _save_keywords_to_history(_p_child_rows)
+            st.success(f"✅ 모바일 클릭률 2% 이상 별 5개 키워드 {_p_added}개 히스토리에 저장됐습니다.")
+        st.session_state.auto_save_pending = False
+        st.rerun()
+
 if start_btn:
     if not groq_key:
         st.error("Groq API 키를 입력해주세요.")
     else:
         st.session_state.auto_running = True
         st.session_state.auto_keywords = []  # 매번 새로 시작
+        st.session_state.auto_save_pending = True
         groq_key_idx = 0
         groq_client = Groq(api_key=groq_keys[0])
         customer_id = os.getenv("NAVER_AD_CUSTOMER_ID", "")
@@ -866,6 +891,7 @@ if start_btn:
             if child_rows:
                 added = _save_keywords_to_history(child_rows)
                 st.success(f"✅ 모바일 클릭률 2% 이상 별 5개 키워드 {added}개 히스토리에 저장됐습니다.")
+            st.session_state.auto_save_pending = False
         st.rerun()
 
 # ── 노다지 키워드 찾기 ─────────────────────────────────────

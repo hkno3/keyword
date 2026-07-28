@@ -454,12 +454,12 @@ def fetch_summary_for_keyword(keyword: str, max_chars: int = 2000) -> str:
     return ""
 
 
-def has_news(keyword: str) -> bool:
-    return len(_search_news(keyword, display=1)) > 0
+def count_news(keyword: str) -> int:
+    return len(_search_news(keyword, display=10))
 
 
-def has_blog(keyword: str) -> bool:
-    return len(_search_api(keyword, "blog", "블로그", display=1)) > 0
+def count_blog(keyword: str) -> int:
+    return len(_search_api(keyword, "blog", "블로그", display=10))
 
 
 # ── 정부 RSS ──────────────────────────────────────────────

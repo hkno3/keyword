@@ -20,6 +20,7 @@ load_dotenv()
 
 CRAWLED_FILE = os.path.join(os.path.dirname(__file__), "crawled_links.txt")
 _CRAWLED_FILE_OLD = os.path.join(os.path.dirname(__file__), "crawled_links.json")
+CRAWLED_FILE_NODAJI = os.path.join(os.path.dirname(__file__), "crawled_links_nodaji.txt")
 KEYWORDS_HISTORY_FILE = os.path.join(os.path.dirname(__file__), "keywords_history.json")
 KEYWORDS_BLACKLIST_FILE = os.path.join(os.path.dirname(__file__), "keywords_blacklist.json")
 MEMO_FILE = os.path.join(os.path.dirname(__file__), "memo.txt")
@@ -254,6 +255,17 @@ def _save_crawled_link(link: str):
     with open(CRAWLED_FILE, "a", encoding="utf-8") as f:
         f.write(link + "\n")
 
+def _load_crawled_links_nodaji() -> set:
+    try:
+        with open(CRAWLED_FILE_NODAJI, "r", encoding="utf-8") as f:
+            return set(line.strip() for line in f if line.strip())
+    except Exception:
+        return set()
+
+def _save_crawled_link_nodaji(link: str):
+    with open(CRAWLED_FILE_NODAJI, "a", encoding="utf-8") as f:
+        f.write(link + "\n")
+
 st.set_page_config(page_title="수익형 키워드 분석기", page_icon="🔍", layout="wide")
 st.title("🔍 수익형 키워드 분석기")
 st.caption("뉴스 기사를 붙여넣으면 경쟁 낮은 블로그 키워드를 자동으로 찾아줍니다")
@@ -298,6 +310,12 @@ with st.sidebar:
             if os.path.exists(_f):
                 os.remove(_f)
         st.session_state.auto_crawled = []
+        st.rerun()
+    nodaji_crawled_count = len(_load_crawled_links_nodaji())
+    st.caption(f"노다지 크롤링 기록: {nodaji_crawled_count}개 기사")
+    if st.button("🗑️ 노다지 크롤링 기록 초기화"):
+        if os.path.exists(CRAWLED_FILE_NODAJI):
+            os.remove(CRAWLED_FILE_NODAJI)
         st.rerun()
     st.divider()
     st.markdown(f"**🤖 Groq 사용량 (오늘 {datetime.now().strftime('%m/%d')})**")
@@ -916,7 +934,7 @@ if nd_start_btn:
                 st.session_state[_nd_cache_key] = _fetch_map2[nodaji_source](auto_category, max_total=1000)
 
         _nd_articles = st.session_state[_nd_cache_key]
-        _nd_crawled = _load_crawled_links()
+        _nd_crawled = _load_crawled_links_nodaji()
         _nd_collected = []
         _nd_collected_kws = set(_load_keywords_history().keys()) | set(_load_blacklist().keys())
 
@@ -939,7 +957,7 @@ if nd_start_btn:
                 _nd_text = news_fetcher.scrape_article(_nd_article["link"])
             else:
                 _nd_text = f"{_nd_article['title']}\n{_nd_article.get('description', '')}".strip()
-            _save_crawled_link(_nd_article["link"])
+            _save_crawled_link_nodaji(_nd_article["link"])
             _nd_crawled.add(_nd_article["link"])
 
             if not _nd_text:

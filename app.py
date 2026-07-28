@@ -912,6 +912,14 @@ def _render_nodaji_table(keywords):
 
 _render_nodaji_table(st.session_state.nodaji_keywords)
 
+if st.session_state.get("nodaji_pending_save"):
+    if st.button("📥 노다지 키워드 히스토리에 추가", type="primary", use_container_width=True):
+        _nd_to_save = [{**r, "is_parent": True} for r in st.session_state["nodaji_pending_save"]]
+        _nd_saved = _save_keywords_to_history(_nd_to_save)
+        st.session_state["nodaji_pending_save"] = []
+        st.success(f"✅ 노다지 키워드 {_nd_saved}개 히스토리에 부모 키워드로 저장됐습니다.")
+        st.rerun()
+
 if nd_start_btn:
     if not groq_key:
         st.error("Groq API 키를 입력해주세요.")
@@ -1035,6 +1043,7 @@ if nd_start_btn:
 
         if _nd_collected:
             st.success(f"💎 노다지 키워드 {len(_nd_collected)}개 발굴 완료!")
+            st.session_state["nodaji_pending_save"] = _nd_collected
             _run_longtail([r["keyword"] for r in _nd_collected])
             _nd_parent_map = st.session_state.get("longtail_parent_map", {})
             _nd_child_rows = []

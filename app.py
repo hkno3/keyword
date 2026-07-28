@@ -895,8 +895,8 @@ def _render_nodaji_table(keywords):
         "경쟁정도(AD)": r.get("comp_idx", "N/A"),
         "문서수": f"{r['doc_count']:,}",
         "추천도": r["stars"],
-        "뉴스": "없음",
-        "블로그": "없음",
+        "뉴스": f"{r.get('news_cnt', 0)}건",
+        "블로그": f"{r.get('blog_cnt', 0)}건",
     } for r in keywords])
     with nodaji_table_box.container():
         st.success(f"💎 {len(keywords)}개 노다지 키워드 발굴!")
@@ -1001,19 +1001,20 @@ if nd_start_btn:
                 _nd_comp = _nd_vol.get("comp_idx", "")
                 if _nd_comp not in _LOW_COMP:
                     continue
-                nd_status.info(f"📰 뉴스 체크: {_nd_kw}")
-                if news_fetcher.has_news(_nd_kw):
+                nd_status.info(f"📰 뉴스·블로그 체크: {_nd_kw}")
+                _nd_news_cnt = news_fetcher.count_news(_nd_kw)
+                _nd_blog_cnt = news_fetcher.count_blog(_nd_kw)
+                if _nd_news_cnt >= 10 and _nd_blog_cnt >= 10:
                     continue
-                nd_status.info(f"📝 블로그 체크: {_nd_kw}")
-                if news_fetcher.has_blog(_nd_kw):
-                    continue
-                nd_status.info(f"💎 노다지 발견! {_nd_kw} — 문서수 조회 중...")
+                nd_status.info(f"💎 노다지 발견! {_nd_kw} (뉴스 {_nd_news_cnt}건 / 블로그 {_nd_blog_cnt}건) — 문서수 조회 중...")
                 _nd_doc = naver_api.get_doc_counts_parallel([_nd_kw], naver_id, naver_secret).get(_nd_kw, 0)
                 _nd_row = naver_api.build_keyword_table({_nd_kw: _nd_vol}, {_nd_kw: _nd_doc})
                 if _nd_row:
                     _nd_r = dict(_nd_row[0])
                     _nd_r["source_title"] = _nd_article["title"]
                     _nd_r["source_article"] = _nd_text[:2000]
+                    _nd_r["news_cnt"] = _nd_news_cnt
+                    _nd_r["blog_cnt"] = _nd_blog_cnt
                     _nd_collected.append(_nd_r)
                     _nd_collected_kws.add(_nd_kw)
 

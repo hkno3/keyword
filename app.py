@@ -870,14 +870,13 @@ for key in ["nodaji_keywords", "nodaji_running"]:
     if key not in st.session_state:
         st.session_state[key] = [] if key != "nodaji_running" else False
 
-col_nd1, col_nd2, col_nd3, col_nd4 = st.columns([1, 1, 1, 1])
+st.caption("소스: 🏛️ 정부RSS + 🌐 해외뉴스")
+col_nd1, col_nd2, col_nd3 = st.columns([1, 1, 1])
 with col_nd1:
     nodaji_target = st.number_input("찾을 키워드 수", min_value=1, value=5, step=1, key="nodaji_target_input")
 with col_nd2:
-    nodaji_source = st.selectbox("소스", ["블로그", "뉴스", "지식인", "카페", "웹문서"], key="nodaji_source")
-with col_nd3:
     nd_start_btn = st.button("💎 노다지 자동 찾기", type="primary", use_container_width=True)
-with col_nd4:
+with col_nd3:
     nd_stop_btn = st.button("⏹ 스탑", key="nd_stop", use_container_width=True)
 
 if nd_stop_btn:
@@ -921,19 +920,14 @@ if nd_start_btn:
         naver_secret = os.getenv("NAVER_CLIENT_SECRET", "")
         _LOW_COMP = {"매우낮음", "낮음", "N/A", ""}
 
-        _nd_cache_key = f"{nodaji_source}_{auto_category}"
-        if not st.session_state.get(_nd_cache_key):
-            with st.spinner(f"{auto_category} {nodaji_source} 수집 중..."):
-                _fetch_map2 = {
-                    "뉴스": news_fetcher.fetch_category_news,
-                    "지식인": news_fetcher.fetch_category_kin,
-                    "블로그": news_fetcher.fetch_category_blog,
-                    "카페": news_fetcher.fetch_category_cafe,
-                    "웹문서": news_fetcher.fetch_category_web,
-                }
-                st.session_state[_nd_cache_key] = _fetch_map2[nodaji_source](auto_category, max_total=1000)
+        if not st.session_state.get("nodaji_govt_articles"):
+            with st.spinner("🏛️ 정부 RSS 수집 중..."):
+                st.session_state["nodaji_govt_articles"] = news_fetcher.fetch_government_rss(max_total=300)
+        if not st.session_state.get("nodaji_overseas_articles"):
+            with st.spinner("🌐 해외 뉴스 RSS 수집 중..."):
+                st.session_state["nodaji_overseas_articles"] = news_fetcher.fetch_overseas_news_rss(max_total=200)
 
-        _nd_articles = st.session_state[_nd_cache_key]
+        _nd_articles = st.session_state["nodaji_govt_articles"] + st.session_state["nodaji_overseas_articles"]
         _nd_crawled = _load_crawled_links_nodaji()
         _nd_collected = []
         _nd_collected_kws = set(_load_keywords_history().keys()) | set(_load_blacklist().keys())
@@ -948,15 +942,12 @@ if nd_start_btn:
                 break
             if _nd_article["link"] in _nd_crawled:
                 continue
-            if not _is_relevant_article(_nd_article["title"], auto_category):
-                continue
 
-            nd_status.info(f"🔍 [{_nd_article.get('pubDate','')}] {_nd_article['title'][:50]}...")
+            _nd_is_overseas = _nd_article.get("type") == "해외뉴스"
+            _nd_src_label = "🌐" if _nd_is_overseas else "🏛️"
+            nd_status.info(f"{_nd_src_label} [{_nd_article.get('pubDate','')}] {_nd_article['title'][:50]}...")
 
-            if nodaji_source == "뉴스":
-                _nd_text = news_fetcher.scrape_article(_nd_article["link"])
-            else:
-                _nd_text = f"{_nd_article['title']}\n{_nd_article.get('description', '')}".strip()
+            _nd_text = f"{_nd_article['title']}\n{_nd_article.get('description', '')}".strip()
             _save_crawled_link_nodaji(_nd_article["link"])
             _nd_crawled.add(_nd_article["link"])
 
@@ -964,7 +955,10 @@ if nd_start_btn:
                 continue
 
             try:
-                _nd_seeds, _nd_tokens = claude_service.extract_seed_keywords(_nd_text, _nd_groq_client)
+                if _nd_is_overseas:
+                    _nd_seeds, _nd_tokens = claude_service.extract_keywords_from_english(_nd_text, _nd_groq_client)
+                else:
+                    _nd_seeds, _nd_tokens = claude_service.extract_seed_keywords(_nd_text, _nd_groq_client)
                 _add_groq_tokens(_nd_tokens)
                 _nd_seeds = [s for s in _nd_seeds if len(s.strip()) >= 2]
             except Exception as _nd_e:
@@ -974,7 +968,10 @@ if nd_start_btn:
                     if _nd_groq_idx < len(groq_keys):
                         _nd_groq_client = Groq(api_key=groq_keys[_nd_groq_idx])
                         try:
-                            _nd_seeds, _nd_tokens = claude_service.extract_seed_keywords(_nd_text, _nd_groq_client)
+                            if _nd_is_overseas:
+                                _nd_seeds, _nd_tokens = claude_service.extract_keywords_from_english(_nd_text, _nd_groq_client)
+                            else:
+                                _nd_seeds, _nd_tokens = claude_service.extract_seed_keywords(_nd_text, _nd_groq_client)
                             _add_groq_tokens(_nd_tokens)
                             _nd_seeds = [s for s in _nd_seeds if len(s.strip()) >= 2]
                         except Exception:
@@ -999,7 +996,7 @@ if nd_start_btn:
                     break
                 if _nd_kw in _nd_collected_kws:
                     continue
-                if _nd_vol.get("total_search", 0) < 500:
+                if _nd_vol.get("total_search", 0) < 300:
                     continue
                 _nd_comp = _nd_vol.get("comp_idx", "")
                 if _nd_comp not in _LOW_COMP:

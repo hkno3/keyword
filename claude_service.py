@@ -43,6 +43,41 @@ JSON 배열로만 반환: ["키워드1", "키워드2", ...]""",
     return [], tokens
 
 
+def extract_keywords_from_english(article: str, client: Groq) -> tuple[list[str], int]:
+    """영어 기사에서 한국인이 네이버에서 검색할 한국어 키워드 추출"""
+    response = client.chat.completions.create(
+        model=MODEL,
+        max_tokens=300,
+        reasoning_effort="none",
+        messages=[{
+            "role": "user",
+            "content": f"""한국 블로그 SEO 전문가입니다.
+아래 영어 기사에서 한국인이 네이버에서 검색할 가능성이 높은 한국어 키워드 5~10개를 추출하세요.
+단순 직역이 아닌, 한국인이 실제로 검색하는 자연스러운 표현으로 변환하세요.
+좋은 예: "intermittent fasting" → "간헐적 단식" / "collagen supplement" → "콜라겐 영양제"
+
+조건:
+- 반드시 한국어 단일 단어 또는 짧은 구 (2~5글자)
+- 한국인이 네이버에서 직접 검색할 법한 구체적인 표현
+- 범용 단어("경제", "기술", "글로벌") 금지
+
+기사:
+{article[:600]}
+
+JSON 배열로만 반환: ["키워드1", "키워드2", ...]""",
+        }],
+    )
+    tokens = response.usage.total_tokens if response.usage else 0
+    text = response.choices[0].message.content.strip()
+    match = re.search(r"\[.*?\]", text, re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group()), tokens
+        except json.JSONDecodeError:
+            pass
+    return [], tokens
+
+
 def generate_title_single(keyword: str, client: Groq, summary: str = "") -> tuple[str, int]:
     """키워드로 블로그 제목 1개 생성. (title, total_tokens) 반환"""
     context = f"\n\n## 키워드 관련 실제 정보 (반드시 이 정보 기반으로 제목 작성)\n{summary}" if summary else ""

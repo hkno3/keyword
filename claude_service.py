@@ -125,8 +125,17 @@ def generate_title_single(keyword: str, client: Groq, summary: str = "") -> tupl
     return title, tokens
 
 
-def generate_titles(keyword: str, client: Groq) -> tuple[list[str], str, int]:
+def generate_titles(keyword: str, client: Groq, child_keywords: list = None) -> tuple[list[str], str, int]:
     """키워드로 블로그 제목 3개 생성 + 추천 1개 반환"""
+    child_section = ""
+    if child_keywords:
+        child_section = f"""
+## 네이버 자동완성 키워드 (사람들이 실제로 검색하는 조합)
+{", ".join(child_keywords[:20])}
+
+위 자동완성 키워드 중 관련성 높은 단어/조합을 제목에 자연스럽게 녹여넣으세요.
+단, 억지로 끼워 맞추지 말고 제목이 자연스러워야 합니다.
+"""
     response = client.chat.completions.create(
         model=MODEL,
         max_tokens=1200,
@@ -136,7 +145,7 @@ def generate_titles(keyword: str, client: Groq) -> tuple[list[str], str, int]:
             "content": f"""당신은 네이버 블로그 SEO 전문가입니다.
 
 키워드: "{keyword}"
-
+{child_section}
 ## 처리 단계
 
 STEP 1. 키워드에 띄어쓰기가 없으면 한국어 문법에 맞게 교정합니다.

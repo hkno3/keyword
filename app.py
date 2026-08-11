@@ -31,6 +31,7 @@ GROQ_USAGE_FILE = os.path.join(os.path.dirname(__file__), "groq_usage.json")
 GEMINI_USAGE_FILE = os.path.join(os.path.dirname(__file__), "gemini_usage.json")
 WP_SITES_FILE = os.path.join(os.path.dirname(__file__), "wp_sites.json")
 SITEMAP_SOURCES_FILE = os.path.join(os.path.dirname(__file__), "sitemap_sources.json")
+CHILD_KEYWORDS_FILE = os.path.join(os.path.dirname(__file__), "child_keywords.json")
 
 def _load_sitemap_sources() -> list:
     try:
@@ -266,6 +267,27 @@ def _save_crawled_link_nodaji(link: str):
     with open(CRAWLED_FILE_NODAJI, "a", encoding="utf-8") as f:
         f.write(link + "\n")
 
+def _load_child_keywords() -> dict:
+    try:
+        with open(CHILD_KEYWORDS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def _save_child_keywords(data: dict):
+    with open(CHILD_KEYWORDS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+def _add_to_child_keywords(parent_kw: str, child_kws: list):
+    existing_history = set(_load_keywords_history().keys())
+    data = _load_child_keywords()
+    existing = set(data.get(parent_kw, []))
+    new_children = [kw for kw in child_kws if kw not in existing_history and kw not in existing]
+    if new_children:
+        data[parent_kw] = list(existing) + new_children
+        _save_child_keywords(data)
+    return len(new_children)
+
 st.set_page_config(page_title="수익형 키워드 분석기", page_icon="🔍", layout="wide")
 st.title("🔍 수익형 키워드 분석기")
 st.caption("뉴스 기사를 붙여넣으면 경쟁 낮은 블로그 키워드를 자동으로 찾아줍니다")
@@ -316,6 +338,13 @@ with st.sidebar:
     if st.button("🗑️ 노다지 크롤링 기록 초기화"):
         if os.path.exists(CRAWLED_FILE_NODAJI):
             os.remove(CRAWLED_FILE_NODAJI)
+        st.rerun()
+    _ck_data = _load_child_keywords()
+    _ck_total = sum(len(v) for v in _ck_data.values())
+    st.caption(f"자식 키워드: {len(_ck_data)}개 부모 / {_ck_total}개 자동완성")
+    if st.button("🗑️ 자식 키워드 초기화"):
+        if os.path.exists(CHILD_KEYWORDS_FILE):
+            os.remove(CHILD_KEYWORDS_FILE)
         st.rerun()
     st.divider()
     st.markdown(f"**🤖 Groq 사용량 (오늘 {datetime.now().strftime('%m/%d')})**")
@@ -692,26 +721,24 @@ def _render_auto_table(keywords):
 _render_auto_table(st.session_state.auto_keywords)
 
 if st.session_state.get("auto_save_pending") and st.session_state.auto_keywords and not st.session_state.auto_running:
-    if st.button("📥 롱테일 찾기 + 히스토리 저장", type="primary", use_container_width=True):
+    if st.button("📥 히스토리 저장 + 자식 키워드 수집", type="primary", use_container_width=True):
         _pending = st.session_state.auto_keywords
+        _p_parents_save = [{**r, "is_parent": True} for r in _pending]
+        _p_added_parents = _save_keywords_to_history(_p_parents_save)
+        if _p_added_parents:
+            st.success(f"✅ 부모 키워드 {_p_added_parents}개 히스토리에 저장됐습니다.")
         _run_longtail([r["keyword"] for r in _pending])
         _p_map = st.session_state.get("longtail_parent_map", {})
-        _p_child_rows = []
-        if st.session_state.get("longtail_table"):
-            for r in st.session_state.longtail_table:
-                if r.get("mobile_ctr", 0) >= 2 and r.get("stars", "") == "⭐⭐⭐⭐⭐":
-                    _cr = dict(r)
-                    _pk = _p_map.get(r["keyword"])
-                    if _pk:
-                        _cr["parent_keyword"] = _pk
-                    _p_child_rows.append(_cr)
-        _p_parents_with_ch = {r["parent_keyword"] for r in _p_child_rows if "parent_keyword" in r}
-        _p_parents_save = [{**r, "is_parent": True} for r in _pending if r["keyword"] in _p_parents_with_ch]
-        if _p_parents_save:
-            _save_keywords_to_history(_p_parents_save)
-        if _p_child_rows:
-            _p_added = _save_keywords_to_history(_p_child_rows)
-            st.success(f"✅ 모바일 클릭률 2% 이상 별 5개 키워드 {_p_added}개 히스토리에 저장됐습니다.")
+        if _p_map:
+            from collections import defaultdict
+            _p_pc = defaultdict(list)
+            for _ck, _pk in _p_map.items():
+                _p_pc[_pk].append(_ck)
+            _p_total = 0
+            for _pk, _children in _p_pc.items():
+                _p_total += _add_to_child_keywords(_pk, _children)
+            if _p_total:
+                st.success(f"✅ 자식 키워드 {_p_total}개 child_keywords.json에 저장됐습니다.")
         st.session_state.auto_save_pending = False
         st.rerun()
 
@@ -871,26 +898,25 @@ if start_btn:
             st.warning(f"기사를 다 돌았어요. {len(collected)}개 수집됨.")
 
         if collected:
+            # 부모 키워드 전체 히스토리 저장
+            parents_to_save = [{**r, "is_parent": True} for r in collected]
+            added_parents = _save_keywords_to_history(parents_to_save)
+            if added_parents:
+                st.success(f"✅ 부모 키워드 {added_parents}개 히스토리에 저장됐습니다.")
+
+            # 자식 키워드 전체 (필터 없음) → child_keywords.json
             _run_longtail([r["keyword"] for r in collected])
             _parent_map = st.session_state.get("longtail_parent_map", {})
-            child_rows = []
-            if st.session_state.get("longtail_table"):
-                for r in st.session_state.longtail_table:
-                    if r.get("mobile_ctr", 0) >= 2 and r.get("stars", "") == "⭐⭐⭐⭐⭐":
-                        child_row = dict(r)
-                        parent_kw = _parent_map.get(r["keyword"])
-                        if parent_kw:
-                            child_row["parent_keyword"] = parent_kw
-                        child_rows.append(child_row)
-
-            # 자식이 있는 부모만 히스토리 저장
-            parents_with_children = {r["parent_keyword"] for r in child_rows if "parent_keyword" in r}
-            parents_to_save = [{**r, "is_parent": True} for r in collected if r["keyword"] in parents_with_children]
-            if parents_to_save:
-                _save_keywords_to_history(parents_to_save)
-            if child_rows:
-                added = _save_keywords_to_history(child_rows)
-                st.success(f"✅ 모바일 클릭률 2% 이상 별 5개 키워드 {added}개 히스토리에 저장됐습니다.")
+            if _parent_map:
+                from collections import defaultdict
+                _pc = defaultdict(list)
+                for _ck, _pk in _parent_map.items():
+                    _pc[_pk].append(_ck)
+                _total_added = 0
+                for _pk, _children in _pc.items():
+                    _total_added += _add_to_child_keywords(_pk, _children)
+                if _total_added:
+                    st.success(f"✅ 자식 키워드 {_total_added}개 child_keywords.json에 저장됐습니다.")
             st.session_state.auto_save_pending = False
         st.rerun()
 
@@ -1104,13 +1130,33 @@ with col_lt1:
 with col_lt2:
     direct_lt_btn = st.button("🔎 롱테일 찾기", use_container_width=True)
 
-auto_lt_btn = st.button("⭐ 황금 키워드로 롱테일 찾기", use_container_width=True,
-                         disabled=len(st.session_state.auto_keywords) == 0)
+col_lt3, col_lt4 = st.columns([3, 1])
+with col_lt3:
+    auto_lt_btn = st.button("⭐ 황금 키워드로 롱테일 찾기", use_container_width=True,
+                             disabled=len(st.session_state.auto_keywords) == 0)
+with col_lt4:
+    bulk_child_btn = st.button("📦 자식 키워드 일괄 수집", use_container_width=True,
+                                help="히스토리의 체크 안 된 부모 키워드 전체 자동완성을 child_keywords.json에 저장")
 
 if auto_lt_btn:
     seed_kws = [r["keyword"] for r in st.session_state.auto_keywords]
     _run_longtail(seed_kws)
     st.rerun()
+
+if bulk_child_btn:
+    _hist = _load_keywords_history()
+    _unchecked_parents = [kw for kw, data in _hist.items()
+                          if data.get("is_parent") and not data.get("checked")]
+    if not _unchecked_parents:
+        st.warning("체크 안 된 부모 키워드가 없어요.")
+    else:
+        _bulk_total = 0
+        with st.spinner(f"자동완성 수집 중... ({len(_unchecked_parents)}개 부모 키워드)"):
+            for _bkw in _unchecked_parents:
+                _bac = naver_api.get_autocomplete(_bkw)
+                _bulk_total += _add_to_child_keywords(_bkw, _bac)
+        st.success(f"✅ {len(_unchecked_parents)}개 부모 → 자식 키워드 {_bulk_total}개 저장됐습니다.")
+        st.rerun()
 
 if direct_lt_btn:
     if direct_lt_input.strip():
@@ -2183,7 +2229,8 @@ if st.session_state.keyword_table:
             else:
                 groq_client = Groq(api_key=groq_key)
                 with st.spinner("제목 생성 중..."):
-                    titles, recommended, tokens = claude_service.generate_titles(selected, groq_client)
+                    _ck_ref = _load_child_keywords().get(selected, [])
+                    titles, recommended, tokens = claude_service.generate_titles(selected, groq_client, child_keywords=_ck_ref or None)
                     _add_groq_tokens(tokens)
                 kw_data = next(r for r in filtered if r["keyword"] == selected)
                 st.session_state.titles = {

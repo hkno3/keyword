@@ -213,30 +213,33 @@ class NaverSearchSession:
         time.sleep(random.uniform(self.min_delay, self.max_delay))
 
     def _click_random_result(self):
-        """검색 결과 링크 1~2개 랜덤 클릭 후 뒤로가기 — 사람처럼 보이게."""
+        """검색 결과 링크 1~2개 방문 후 뒤로가기 — 사람처럼 보이게."""
         try:
-            # 광고 제외한 일반 결과 링크만 대상
             links = self._page.locator(
                 "#main_pack a[href]:not([href*='ad.naver']):not([href*='naver.com/adcr'])"
             ).all()
             if not links:
                 return
-            clicks = random.randint(1, min(2, len(links)))
-            candidates = random.sample(links, clicks)
-            for link in candidates:
+
+            # href만 수집 (새 탭 문제 없이 직접 이동)
+            hrefs = []
+            for link in links:
                 try:
                     href = link.get_attribute("href") or ""
-                    # 네이버 내부 UI 링크 건너뜀
-                    if not href.startswith("http") or "search.naver.com" in href:
-                        continue
-                    link.scroll_into_view_if_needed()
-                    time.sleep(random.uniform(0.3, 0.8))
-                    link.click()
-                    self._page.wait_for_load_state("domcontentloaded", timeout=10000)
+                    if href.startswith("http") and "search.naver.com" not in href:
+                        hrefs.append(href)
+                except Exception:
+                    pass
+
+            if not hrefs:
+                return
+
+            for href in random.sample(hrefs, min(random.randint(1, 2), len(hrefs))):
+                try:
+                    self._page.goto(href, wait_until="domcontentloaded", timeout=10000)
                     # 읽는 척 (8~20초)
                     read_time = random.uniform(8, 20)
-                    scroll_pos = random.randint(200, 600)
-                    self._page.evaluate(f"window.scrollBy(0, {scroll_pos})")
+                    self._page.evaluate(f"window.scrollBy(0, {random.randint(200, 600)})")
                     time.sleep(read_time / 2)
                     self._page.evaluate(f"window.scrollBy(0, {random.randint(100, 400)})")
                     time.sleep(read_time / 2)

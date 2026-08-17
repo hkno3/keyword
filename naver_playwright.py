@@ -212,6 +212,44 @@ class NaverSearchSession:
     def _random_delay(self):
         time.sleep(random.uniform(self.min_delay, self.max_delay))
 
+    def _click_random_result(self):
+        """검색 결과 링크 1~2개 랜덤 클릭 후 뒤로가기 — 사람처럼 보이게."""
+        try:
+            # 광고 제외한 일반 결과 링크만 대상
+            links = self._page.locator(
+                "#main_pack a[href]:not([href*='ad.naver']):not([href*='naver.com/adcr'])"
+            ).all()
+            if not links:
+                return
+            clicks = random.randint(1, min(2, len(links)))
+            candidates = random.sample(links, clicks)
+            for link in candidates:
+                try:
+                    href = link.get_attribute("href") or ""
+                    # 네이버 내부 UI 링크 건너뜀
+                    if not href.startswith("http") or "search.naver.com" in href:
+                        continue
+                    link.scroll_into_view_if_needed()
+                    time.sleep(random.uniform(0.3, 0.8))
+                    link.click()
+                    self._page.wait_for_load_state("domcontentloaded", timeout=10000)
+                    # 읽는 척 (8~20초)
+                    read_time = random.uniform(8, 20)
+                    scroll_pos = random.randint(200, 600)
+                    self._page.evaluate(f"window.scrollBy(0, {scroll_pos})")
+                    time.sleep(read_time / 2)
+                    self._page.evaluate(f"window.scrollBy(0, {random.randint(100, 400)})")
+                    time.sleep(read_time / 2)
+                    self._page.go_back(wait_until="domcontentloaded", timeout=10000)
+                    time.sleep(random.uniform(1.0, 2.0))
+                except Exception:
+                    try:
+                        self._page.go_back(wait_until="domcontentloaded", timeout=5000)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
     # ── public API ─────────────────────────────────────────
 
     def check_nodaji(self, keyword: str) -> dict:
@@ -255,6 +293,9 @@ class NaverSearchSession:
             time.sleep(random.uniform(1.0, 2.5))
             self._page.evaluate(f"window.scrollBy(0, {random.randint(-200, 200)})")
             time.sleep(random.uniform(0.5, 1.5))
+
+            # 결과 링크 랜덤 클릭 (사람처럼 읽는 척)
+            self._click_random_result()
 
             if _detect_block(self._page):
                 self._consecutive_failures += 1

@@ -535,3 +535,23 @@ def fetch_overseas_news_rss(max_total: int = 200) -> list[dict]:
                 seen.add(item["title"])
                 results.append(item)
     return results[:max_total]
+
+
+def fetch_all_for_nodaji(max_per_source: int = 30) -> list[dict]:
+    """모든 카테고리 × 모든 섹션에서 기사 수집 (노다지 키워드 찾기용)."""
+    all_categories = list(CATEGORY_QUERIES.keys())
+    source_fns = [
+        fetch_category_news,
+        fetch_category_kin,
+        fetch_category_blog,
+        fetch_category_cafe,
+        fetch_category_web,
+    ]
+    seen, results = set(), []
+    for category in all_categories:
+        for fn in source_fns:
+            for item in fn(category, max_total=max_per_source):
+                if item["title"] not in seen:
+                    seen.add(item["title"])
+                    results.append(item)
+    return results

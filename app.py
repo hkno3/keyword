@@ -13,6 +13,7 @@ import naver_api
 import claude_service
 import gemini_service
 import news_fetcher
+import naver_playwright
 import wp_service
 import sitemap_service
 
@@ -929,8 +930,14 @@ for key in ["nodaji_keywords", "nodaji_running"]:
     if key not in st.session_state:
         st.session_state[key] = [] if key != "nodaji_running" else False
 
-st.caption("소스: 🏛️ 정부RSS + 🌐 해외뉴스")
-col_nd1, col_nd2, col_nd3 = st.columns([1, 1, 1])
+col_nd_src, col_nd1, col_nd2, col_nd3 = st.columns([2, 1, 1, 1])
+with col_nd_src:
+    nodaji_source_select = st.selectbox(
+        "노다지 소스",
+        ["정부+해외", "전체 (모든 카테고리+섹션)"],
+        key="nd_source_select",
+        label_visibility="collapsed",
+    )
 with col_nd1:
     nodaji_target = st.number_input("찾을 키워드 수", min_value=1, value=5, step=1, key="nodaji_target_input")
 with col_nd2:
@@ -954,8 +961,7 @@ def _render_nodaji_table(keywords):
         "경쟁정도(AD)": r.get("comp_idx", "N/A"),
         "문서수": f"{r['doc_count']:,}",
         "추천도": r["stars"],
-        "뉴스": f"{r.get('news_cnt', 0)}건",
-        "블로그": f"{r.get('blog_cnt', 0)}건",
+        "네이버검증": "광고✗ 뷰✗ 뉴스✗ 쇼핑✗",
     } for r in keywords])
     with nodaji_table_box.container():
         st.success(f"💎 {len(keywords)}개 노다지 키워드 발굴!")
@@ -985,7 +991,6 @@ if nd_start_btn:
         ad_secret = os.getenv("NAVER_AD_SECRET_KEY", "")
         naver_id = os.getenv("NAVER_CLIENT_ID", "")
         naver_secret = os.getenv("NAVER_CLIENT_SECRET", "")
-        _LOW_COMP = {"매우낮음", "낮음", "N/A", ""}
 
         if not st.session_state.get("nodaji_govt_articles"):
             with st.spinner("🏛️ 정부 RSS 수집 중..."):
@@ -995,12 +1000,21 @@ if nd_start_btn:
                 st.session_state["nodaji_overseas_articles"] = news_fetcher.fetch_overseas_news_rss(max_total=200)
 
         _nd_articles = st.session_state["nodaji_govt_articles"] + st.session_state["nodaji_overseas_articles"]
+        if nodaji_source_select == "전체 (모든 카테고리+섹션)":
+            if not st.session_state.get("nodaji_all_articles"):
+                with st.spinner("📰 전체 카테고리/섹션 수집 중... (시간이 걸릴 수 있습니다)"):
+                    st.session_state["nodaji_all_articles"] = news_fetcher.fetch_all_for_nodaji(max_per_source=30)
+            _nd_articles = _nd_articles + st.session_state["nodaji_all_articles"]
         _nd_crawled = _load_crawled_links_nodaji()
         _nd_collected = []
         _nd_collected_kws = set(_load_keywords_history().keys()) | set(_load_blacklist().keys())
 
         nd_status = st.empty()
         nd_progress = st.progress(0)
+        _nd_pw_session = naver_playwright.NaverSearchSession(
+            min_delay=2.0, max_delay=5.0, max_consecutive_failures=3
+        )
+        _nd_pw_session.start()
 
         for _nd_article in _nd_articles:
             if not st.session_state.nodaji_running:
@@ -1065,23 +1079,29 @@ if nd_start_btn:
                     continue
                 if _nd_vol.get("total_search", 0) < 300:
                     continue
-                _nd_comp = _nd_vol.get("comp_idx", "")
-                if _nd_comp not in _LOW_COMP:
+                if _nd_pw_session.is_blocked():
+                    nd_status.error("🚫 네이버 봇 감지! 잠시 후 재시도하거나 IP를 바꿔주세요.")
+                    st.session_state.nodaji_running = False
+                    break
+                nd_status.info(f"🔍 네이버 검색 확인 중: {_nd_kw}")
+                _nd_pw_result = _nd_pw_session.check_nodaji(_nd_kw)
+                if _nd_pw_result.get("blocked"):
+                    nd_status.warning(
+                        f"⚠️ 봇 감지 경고 ({_nd_kw}) — "
+                        f"연속 실패 {_nd_pw_session.consecutive_failures}/{_nd_pw_session.max_consecutive_failures}"
+                    )
                     continue
-                nd_status.info(f"📰 뉴스·블로그 체크: {_nd_kw}")
-                _nd_news_cnt = news_fetcher.count_news(_nd_kw)
-                _nd_blog_cnt = news_fetcher.count_blog(_nd_kw)
-                if _nd_news_cnt >= 10 and _nd_blog_cnt >= 10:
+                if _nd_pw_result.get("error"):
                     continue
-                nd_status.info(f"💎 노다지 발견! {_nd_kw} (뉴스 {_nd_news_cnt}건 / 블로그 {_nd_blog_cnt}건) — 문서수 조회 중...")
+                if not _nd_pw_result.get("is_nodaji"):
+                    continue
+                nd_status.info(f"💎 노다지 발견! {_nd_kw} — 문서수 조회 중...")
                 _nd_doc = naver_api.get_doc_counts_parallel([_nd_kw], naver_id, naver_secret).get(_nd_kw, 0)
                 _nd_row = naver_api.build_keyword_table({_nd_kw: _nd_vol}, {_nd_kw: _nd_doc})
                 if _nd_row:
                     _nd_r = dict(_nd_row[0])
                     _nd_r["source_title"] = _nd_article["title"]
                     _nd_r["source_article"] = _nd_text[:2000]
-                    _nd_r["news_cnt"] = _nd_news_cnt
-                    _nd_r["blog_cnt"] = _nd_blog_cnt
                     _nd_collected.append(_nd_r)
                     _nd_collected_kws.add(_nd_kw)
 
@@ -1089,6 +1109,7 @@ if nd_start_btn:
             nd_progress.progress(min(len(_nd_collected) / nodaji_target, 1.0))
             _render_nodaji_table(_nd_collected)
 
+        _nd_pw_session.stop()
         st.session_state.nodaji_running = False
         nd_status.empty()
         nd_progress.empty()
@@ -1096,6 +1117,14 @@ if nd_start_btn:
         if _nd_collected:
             st.success(f"💎 노다지 키워드 {len(_nd_collected)}개 발굴 완료!")
             st.session_state["nodaji_pending_save"] = _nd_collected
+            # 노다지 키워드 자동완성(자식 키워드) → child_keywords.json
+            _nd_ck_added = 0
+            for _nd_r_kw in _nd_collected:
+                _nd_ac = naver_api.get_autocomplete(_nd_r_kw["keyword"])
+                if _nd_ac:
+                    _nd_ck_added += _add_to_child_keywords(_nd_r_kw["keyword"], _nd_ac)
+            if _nd_ck_added:
+                st.success(f"✅ 노다지 자식 키워드 {_nd_ck_added}개 child_keywords.json에 저장됐습니다.")
             _run_longtail([r["keyword"] for r in _nd_collected])
             _nd_parent_map = st.session_state.get("longtail_parent_map", {})
             _nd_child_rows = []

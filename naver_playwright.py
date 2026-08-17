@@ -94,11 +94,13 @@ class NaverSearchSession:
         max_delay: float = 15.0,
         max_consecutive_failures: int = 3,
         page_wait: float = 2.5,
+        restart_every: int = 2,
     ):
         self.min_delay = min_delay
         self.max_delay = max_delay
         self.max_consecutive_failures = max_consecutive_failures
         self.page_wait = page_wait
+        self.restart_every = restart_every
 
         self._playwright = None
         self._browser = None
@@ -106,7 +108,7 @@ class NaverSearchSession:
         self._page = None
         self._consecutive_failures = 0
         self._total_checks = 0
-        self.login_required = False  # True if manual login was needed this session
+        self.login_required = False
 
     # ── lifecycle ──────────────────────────────────────────
 
@@ -212,46 +214,15 @@ class NaverSearchSession:
     def _random_delay(self):
         time.sleep(random.uniform(self.min_delay, self.max_delay))
 
-    def _click_random_result(self):
-        """검색 결과 링크 1~2개 방문 후 뒤로가기 — 사람처럼 보이게."""
-        try:
-            links = self._page.locator(
-                "#main_pack a[href]:not([href*='ad.naver']):not([href*='naver.com/adcr'])"
-            ).all()
-            if not links:
-                return
-
-            # href만 수집 (새 탭 문제 없이 직접 이동)
-            hrefs = []
-            for link in links:
-                try:
-                    href = link.get_attribute("href") or ""
-                    if href.startswith("http") and "search.naver.com" not in href:
-                        hrefs.append(href)
-                except Exception:
-                    pass
-
-            if not hrefs:
-                return
-
-            for href in random.sample(hrefs, min(random.randint(1, 2), len(hrefs))):
-                try:
-                    self._page.goto(href, wait_until="domcontentloaded", timeout=10000)
-                    # 읽는 척 (8~20초)
-                    read_time = random.uniform(8, 20)
-                    self._page.evaluate(f"window.scrollBy(0, {random.randint(200, 600)})")
-                    time.sleep(read_time / 2)
-                    self._page.evaluate(f"window.scrollBy(0, {random.randint(100, 400)})")
-                    time.sleep(read_time / 2)
-                    self._page.go_back(wait_until="domcontentloaded", timeout=10000)
-                    time.sleep(random.uniform(1.0, 2.0))
-                except Exception:
-                    try:
-                        self._page.go_back(wait_until="domcontentloaded", timeout=5000)
-                    except Exception:
-                        pass
-        except Exception:
-            pass
+    def _restart(self):
+        """브라우저 완전 종료 후 재시작 — 세션 카운터 초기화."""
+        self.stop()
+        time.sleep(random.uniform(8, 15))  # 재시작 전 충분히 대기
+        self._playwright = None
+        self._browser = None
+        self._context = None
+        self._page = None
+        self.start()
 
     # ── public API ─────────────────────────────────────────
 
@@ -273,7 +244,10 @@ class NaverSearchSession:
             result["error"] = "bot_detected"
             return result
 
-        if self._total_checks > 0:
+        # restart_every 번 검색마다 브라우저 재시작
+        if self.restart_every > 0 and self._total_checks > 0 and self._total_checks % self.restart_every == 0:
+            self._restart()
+        elif self._total_checks > 0:
             self._random_delay()
 
         try:
@@ -293,12 +267,7 @@ class NaverSearchSession:
 
             scroll_amount = random.randint(300, 900)
             self._page.evaluate(f"window.scrollBy(0, {scroll_amount})")
-            time.sleep(random.uniform(1.0, 2.5))
-            self._page.evaluate(f"window.scrollBy(0, {random.randint(-200, 200)})")
-            time.sleep(random.uniform(0.5, 1.5))
-
-            # 결과 링크 랜덤 클릭 (사람처럼 읽는 척)
-            self._click_random_result()
+            time.sleep(random.uniform(1.0, 2.0))
 
             if _detect_block(self._page):
                 self._consecutive_failures += 1

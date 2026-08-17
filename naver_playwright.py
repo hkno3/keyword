@@ -172,7 +172,8 @@ class NaverSearchSession:
             self._page.goto("https://www.naver.com", wait_until="domcontentloaded", timeout=15000)
             time.sleep(random.uniform(0.8, 1.5))
 
-            search_box = self._page.locator("#query").first
+            search_box = self._page.locator("#query, input[name='query']").first
+            search_box.wait_for(state="visible", timeout=5000)
             search_box.click()
             time.sleep(random.uniform(0.3, 0.6))
             for ch in keyword:

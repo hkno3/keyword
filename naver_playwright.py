@@ -1,11 +1,17 @@
+import os
+import json
 import time
 import random
 from playwright.sync_api import sync_playwright
+
 try:
     from playwright_stealth import stealth_sync as _stealth_sync
     _HAS_STEALTH = True
 except ImportError:
     _HAS_STEALTH = False
+
+_SESSION_FILE = os.path.join(os.path.dirname(__file__), "naver_session.json")
+_LOGIN_TIMEOUT = 180  # seconds
 
 _BLOCK_URL_KEYWORDS = ["captcha", "robot", "verify", "block"]
 _BLOCK_TEXT_PATTERNS = [
@@ -13,6 +19,7 @@ _BLOCK_TEXT_PATTERNS = [
     "비정상적인 트래픽", "captcha", "robot check",
 ]
 _BLOCK_SELECTORS = ["#captcha", ".captcha_wrap", "[class*='captcha']", "#robot_check"]
+
 _USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
@@ -36,8 +43,12 @@ _STEALTH_SCRIPT = """
 """
 
 
+def _is_naver_logged_in(context) -> bool:
+    cookies = {c["name"] for c in context.cookies()}
+    return "NID_AUT" in cookies and "NID_SES" in cookies
+
+
 def _detect_block(page) -> bool:
-    """Detect if Naver is showing a bot verification or CAPTCHA page."""
     try:
         url = page.url.lower()
         if any(kw in url for kw in _BLOCK_URL_KEYWORDS):
@@ -59,7 +70,6 @@ def _detect_block(page) -> bool:
         except Exception:
             pass
 
-    # Both main containers missing = page failed to load properly or is blocked
     try:
         if page.locator("#main_pack").count() == 0 and page.locator("#searchIframe").count() == 0:
             return True
@@ -72,28 +82,10 @@ def _detect_block(page) -> bool:
 class NaverSearchSession:
     """
     Reusable Playwright browser session for bulk Naver keyword checking.
-    One browser process is shared across many keyword checks to avoid
-    repeated launch overhead and to maintain natural browsing state.
 
-    Bot detection features:
-    - Randomized delay between consecutive searches (min_delay ~ max_delay seconds)
-    - CAPTCHA / block page detection on every page load
-    - Consecutive failure counter: stops checking once max_consecutive_failures is reached
-
-    Usage (explicit start/stop — no indentation change required):
-        session = NaverSearchSession()
-        session.start()
-        try:
-            for kw in keywords:
-                if session.is_blocked():
-                    break
-                result = session.check_nodaji(kw)
-        finally:
-            session.stop()
-
-    Or as a context manager:
-        with NaverSearchSession() as session:
-            result = session.check_nodaji(kw)
+    첫 실행 시 크롬 창에 네이버 로그인 페이지가 열립니다.
+    직접 로그인하시면 세션이 naver_session.json에 저장되어
+    다음 실행부터는 자동으로 로그인 상태로 시작합니다.
     """
 
     def __init__(
@@ -110,9 +102,11 @@ class NaverSearchSession:
 
         self._playwright = None
         self._browser = None
+        self._context = None
         self._page = None
         self._consecutive_failures = 0
         self._total_checks = 0
+        self.login_required = False  # True if manual login was needed this session
 
     # ── lifecycle ──────────────────────────────────────────
 
@@ -129,17 +123,23 @@ class NaverSearchSession:
                 headless=False,
                 args=["--disable-blink-features=AutomationControlled"],
             )
-        viewport = {"width": random.choice([1280, 1366, 1440, 1920]), "height": random.choice([768, 800, 900, 1080])}
-        ctx = self._browser.new_context(
+
+        viewport = {
+            "width": random.choice([1280, 1366, 1440, 1920]),
+            "height": random.choice([768, 800, 900, 1080]),
+        }
+        self._context = self._browser.new_context(
             user_agent=random.choice(_USER_AGENTS),
             viewport=viewport,
             locale="ko-KR",
             timezone_id="Asia/Seoul",
         )
-        self._page = ctx.new_page()
+        self._page = self._context.new_page()
         self._page.add_init_script(_STEALTH_SCRIPT)
         if _HAS_STEALTH:
             _stealth_sync(self._page)
+
+        self._ensure_login()
         return self
 
     def stop(self):
@@ -160,6 +160,44 @@ class NaverSearchSession:
     def __exit__(self, *args):
         self.stop()
 
+    # ── login ──────────────────────────────────────────────
+
+    def _ensure_login(self):
+        # Try loading saved session first
+        if os.path.exists(_SESSION_FILE):
+            try:
+                with open(_SESSION_FILE, "r", encoding="utf-8") as f:
+                    saved = json.load(f)
+                self._context.add_cookies(saved["cookies"])
+                self._page.goto("https://www.naver.com", wait_until="domcontentloaded", timeout=10000)
+                time.sleep(1.5)
+                if _is_naver_logged_in(self._context):
+                    return  # 세션 유효
+            except Exception:
+                pass
+
+        # Manual login required
+        self.login_required = True
+        self._page.goto("https://nid.naver.com/nidlogin.login", wait_until="domcontentloaded", timeout=15000)
+
+        deadline = time.time() + _LOGIN_TIMEOUT
+        while time.time() < deadline:
+            time.sleep(2)
+            if _is_naver_logged_in(self._context):
+                self._save_session()
+                self.login_required = False
+                return
+
+        raise TimeoutError("네이버 로그인 대기 시간 초과 (3분). 다시 시도해주세요.")
+
+    def _save_session(self):
+        try:
+            cookies = self._context.cookies()
+            with open(_SESSION_FILE, "w", encoding="utf-8") as f:
+                json.dump({"cookies": cookies}, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+
     # ── status ─────────────────────────────────────────────
 
     @property
@@ -167,7 +205,6 @@ class NaverSearchSession:
         return self._consecutive_failures
 
     def is_blocked(self) -> bool:
-        """True once consecutive failures have reached the limit."""
         return self._consecutive_failures >= self.max_consecutive_failures
 
     # ── internals ──────────────────────────────────────────
@@ -182,15 +219,6 @@ class NaverSearchSession:
         Visit Naver search for the keyword and detect whether any of:
           파워링크(광고), 뷰탭(블로그+카페), 뉴스, 쇼핑
         is present on the result page.
-
-        Returns dict:
-            is_nodaji (bool)  – True only when ALL four sections are absent
-            has_ad (bool)
-            has_view (bool)
-            has_news (bool)
-            has_shopping (bool)
-            blocked (bool)    – set when bot-detection fired
-            error (str)       – set on any exception or bot-detection
         """
         result = {
             "is_nodaji": False,
@@ -204,12 +232,10 @@ class NaverSearchSession:
             result["error"] = "bot_detected"
             return result
 
-        # Randomized delay between consecutive checks
         if self._total_checks > 0:
             self._random_delay()
 
         try:
-            # Navigate to Naver home first, then type like a human
             self._page.goto("https://www.naver.com", wait_until="domcontentloaded", timeout=15000)
             time.sleep(random.uniform(0.8, 1.5))
 
@@ -224,7 +250,6 @@ class NaverSearchSession:
             self._page.wait_for_load_state("domcontentloaded", timeout=15000)
             time.sleep(self.page_wait)
 
-            # Random scroll like a human reading results
             scroll_amount = random.randint(300, 900)
             self._page.evaluate(f"window.scrollBy(0, {scroll_amount})")
             time.sleep(random.uniform(1.0, 2.5))
@@ -237,7 +262,6 @@ class NaverSearchSession:
                 result["blocked"] = True
                 return result
 
-            # Successful load — reset consecutive failure counter
             self._consecutive_failures = 0
             self._total_checks += 1
 
@@ -276,9 +300,6 @@ class NaverSearchSession:
 
 
 def check_naver_nodaji(keyword: str, delay: float = 1.5) -> dict:
-    """
-    Single-keyword nodaji check (creates and destroys a browser each call).
-    For checking multiple keywords sequentially, use NaverSearchSession instead.
-    """
+    """Single-keyword nodaji check. For bulk use NaverSearchSession instead."""
     with NaverSearchSession(min_delay=delay, max_delay=delay * 1.5, page_wait=delay) as session:
         return session.check_nodaji(keyword)

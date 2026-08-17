@@ -1,6 +1,11 @@
 import time
 import random
 from playwright.sync_api import sync_playwright
+try:
+    from playwright_stealth import stealth_sync as _stealth_sync
+    _HAS_STEALTH = True
+except ImportError:
+    _HAS_STEALTH = False
 
 _BLOCK_URL_KEYWORDS = ["captcha", "robot", "verify", "block"]
 _BLOCK_TEXT_PATTERNS = [
@@ -113,10 +118,17 @@ class NaverSearchSession:
 
     def start(self):
         self._playwright = sync_playwright().start()
-        self._browser = self._playwright.chromium.launch(
-            headless=False,
-            args=["--disable-blink-features=AutomationControlled"],
-        )
+        try:
+            self._browser = self._playwright.chromium.launch(
+                headless=False,
+                channel="chrome",
+                args=["--disable-blink-features=AutomationControlled"],
+            )
+        except Exception:
+            self._browser = self._playwright.chromium.launch(
+                headless=False,
+                args=["--disable-blink-features=AutomationControlled"],
+            )
         viewport = {"width": random.choice([1280, 1366, 1440, 1920]), "height": random.choice([768, 800, 900, 1080])}
         ctx = self._browser.new_context(
             user_agent=random.choice(_USER_AGENTS),
@@ -126,6 +138,8 @@ class NaverSearchSession:
         )
         self._page = ctx.new_page()
         self._page.add_init_script(_STEALTH_SCRIPT)
+        if _HAS_STEALTH:
+            _stealth_sync(self._page)
         return self
 
     def stop(self):

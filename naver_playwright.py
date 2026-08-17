@@ -168,11 +168,18 @@ class NaverSearchSession:
             self._random_delay()
 
         try:
-            self._page.goto(
-                f"https://search.naver.com/search.naver?query={keyword}",
-                wait_until="domcontentloaded",
-                timeout=15000,
-            )
+            # Navigate to Naver home first, then type like a human
+            self._page.goto("https://www.naver.com", wait_until="domcontentloaded", timeout=15000)
+            time.sleep(random.uniform(0.8, 1.5))
+
+            search_box = self._page.locator("#query").first
+            search_box.click()
+            time.sleep(random.uniform(0.3, 0.6))
+            for ch in keyword:
+                search_box.type(ch, delay=random.randint(60, 180))
+            time.sleep(random.uniform(0.3, 0.7))
+            search_box.press("Enter")
+            self._page.wait_for_load_state("domcontentloaded", timeout=15000)
             time.sleep(self.page_wait)
 
             if _detect_block(self._page):

@@ -543,6 +543,65 @@ GOOGLE_TRENDS_RSS_URLS = [
 ]
 
 
+def fetch_nate_trending(max_total: int = 20) -> list[dict]:
+    """네이트 실시간 검색어 스크래핑."""
+    results = []
+    try:
+        resp = requests.get("https://pann.nate.com/", headers=HEADERS, timeout=10)
+        resp.raise_for_status()
+        soup = BeautifulSoup(resp.content, "lxml")
+        # 실시간 검색어 리스트 파싱 (여러 선택자 시도)
+        candidates = (
+            soup.select(".rank_list li a") or
+            soup.select(".realtime_list li a") or
+            soup.select(".issue_rank li a") or
+            soup.select("li.on a") or
+            soup.select(".real_area li a")
+        )
+        seen = set()
+        for el in candidates:
+            kw = el.get_text(strip=True)
+            kw = re.sub(r"^\d+\s*", "", kw).strip()  # 순위 숫자 제거
+            if kw and len(kw) >= 2 and kw not in seen:
+                seen.add(kw)
+                results.append({
+                    "title": kw, "link": "", "description": kw,
+                    "pubDate": "", "type": "네이트트렌드",
+                })
+    except Exception:
+        pass
+    return results[:max_total]
+
+
+def fetch_zum_trending(max_total: int = 20) -> list[dict]:
+    """ZUM 실시간 이슈 키워드 스크래핑."""
+    results = []
+    try:
+        resp = requests.get("https://zum.com/", headers=HEADERS, timeout=10)
+        resp.raise_for_status()
+        soup = BeautifulSoup(resp.content, "lxml")
+        candidates = (
+            soup.select(".issue_keyword a") or
+            soup.select(".trending_list li a") or
+            soup.select(".real_issue li a") or
+            soup.select(".keyword_list li a") or
+            soup.select(".now_issue li a")
+        )
+        seen = set()
+        for el in candidates:
+            kw = el.get_text(strip=True)
+            kw = re.sub(r"^\d+\s*", "", kw).strip()
+            if kw and len(kw) >= 2 and kw not in seen:
+                seen.add(kw)
+                results.append({
+                    "title": kw, "link": "", "description": kw,
+                    "pubDate": "", "type": "줌트렌드",
+                })
+    except Exception:
+        pass
+    return results[:max_total]
+
+
 def fetch_google_trending(max_total: int = 50) -> list[dict]:
     """구글 트렌드 급상승 키워드를 '기사' 형태로 반환 (씨드 직접 사용)."""
     seen, results = set(), []
@@ -582,6 +641,8 @@ def iter_all_for_nodaji(crawled_links: set, max_per_slot: int = 15):
     ]
     slot_fns = [
         ("__google_trends__", lambda: fetch_google_trending(max_total=50)),
+        ("__nate_trends__", lambda: fetch_nate_trending(max_total=20)),
+        ("__zum_trends__", lambda: fetch_zum_trending(max_total=20)),
         ("__govt__", lambda: fetch_government_rss(max_total=300)),
         ("__overseas__", lambda: fetch_overseas_news_rss(max_total=200)),
     ]

@@ -1009,7 +1009,7 @@ if nd_start_btn:
                 continue
 
             _nd_is_overseas = _nd_article.get("type") == "해외뉴스"
-            _nd_type_icons = {"해외뉴스": "🌐", "정부RSS": "🏛️", "뉴스": "📰", "블로그": "✍️", "카페": "☕", "웹문서": "🌍", "지식인": "❓", "구글트렌드": "🔥"}
+            _nd_type_icons = {"해외뉴스": "🌐", "정부RSS": "🏛️", "뉴스": "📰", "블로그": "✍️", "카페": "☕", "웹문서": "🌍", "지식인": "❓", "구글트렌드": "🔥", "네이트트렌드": "🔴", "줌트렌드": "🟡"}
             _nd_src_label = _nd_type_icons.get(_nd_article.get("type", ""), "📄")
             nd_status.info(f"{_nd_src_label} [{_nd_article.get('pubDate','')}] {_nd_article['title'][:50]}...")
 
@@ -1020,8 +1020,8 @@ if nd_start_btn:
             if not _nd_text:
                 continue
 
-            # 구글 트렌드는 제목 자체가 키워드 → Groq 불필요
-            if _nd_article.get("type") == "구글트렌드":
+            # 트렌드 소스는 제목 자체가 키워드 → Groq 불필요
+            if _nd_article.get("type") in ("구글트렌드", "네이트트렌드", "줌트렌드"):
                 _nd_seeds = [_nd_article["title"].strip()]
             else:
                 try:

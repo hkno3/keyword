@@ -1,5 +1,6 @@
 import os
 import re
+import random
 import email.utils
 import requests
 import xml.etree.ElementTree as ET
@@ -537,21 +538,34 @@ def fetch_overseas_news_rss(max_total: int = 200) -> list[dict]:
     return results[:max_total]
 
 
-def fetch_all_for_nodaji(max_per_source: int = 30) -> list[dict]:
-    """모든 카테고리 × 모든 섹션에서 기사 수집 (노다지 키워드 찾기용)."""
-    all_categories = list(CATEGORY_QUERIES.keys())
-    source_fns = [
+def iter_all_for_nodaji(crawled_links: set, max_per_slot: int = 15):
+    """
+    Generator: 모든 카테고리 × 섹션을 라운드로빈으로 돌며 기사 1개씩 yield.
+    슬롯별로 필요할 때만 API 호출 (지연 로딩). 이미 크롤링한 링크는 건너뜀.
+    모든 슬롯이 소진되면 종료.
+    """
+    _src_fns = [
         fetch_category_news,
         fetch_category_kin,
         fetch_category_blog,
         fetch_category_cafe,
         fetch_category_web,
     ]
-    seen, results = set(), []
-    for category in all_categories:
-        for fn in source_fns:
-            for item in fn(category, max_total=max_per_source):
-                if item["title"] not in seen:
-                    seen.add(item["title"])
-                    results.append(item)
-    return results
+    slots = [(cat, fn) for cat in CATEGORY_QUERIES.keys() for fn in _src_fns]
+    random.shuffle(slots)
+    caches = {}
+    empty_consecutive = 0
+    idx = 0
+
+    while empty_consecutive < len(slots):
+        cat, fn = slots[idx % len(slots)]
+        idx += 1
+        key = (cat, fn.__name__)
+        if key not in caches:
+            caches[key] = [a for a in fn(cat, max_total=max_per_slot)
+                           if a["link"] not in crawled_links]
+        if caches[key]:
+            empty_consecutive = 0
+            yield caches[key].pop(0)
+        else:
+            empty_consecutive += 1

@@ -992,20 +992,17 @@ if nd_start_btn:
         naver_id = os.getenv("NAVER_CLIENT_ID", "")
         naver_secret = os.getenv("NAVER_CLIENT_SECRET", "")
 
-        if not st.session_state.get("nodaji_govt_articles"):
-            with st.spinner("🏛️ 정부 RSS 수집 중..."):
-                st.session_state["nodaji_govt_articles"] = news_fetcher.fetch_government_rss(max_total=300)
-        if not st.session_state.get("nodaji_overseas_articles"):
-            with st.spinner("🌐 해외 뉴스 RSS 수집 중..."):
-                st.session_state["nodaji_overseas_articles"] = news_fetcher.fetch_overseas_news_rss(max_total=200)
-
-        _nd_articles = st.session_state["nodaji_govt_articles"] + st.session_state["nodaji_overseas_articles"]
-        if nodaji_source_select == "전체 (모든 카테고리+섹션)":
-            if not st.session_state.get("nodaji_all_articles"):
-                with st.spinner("📰 전체 카테고리/섹션 수집 중... (시간이 걸릴 수 있습니다)"):
-                    st.session_state["nodaji_all_articles"] = news_fetcher.fetch_all_for_nodaji(max_per_source=30)
-            _nd_articles = _nd_articles + st.session_state["nodaji_all_articles"]
         _nd_crawled = _load_crawled_links_nodaji()
+        if nodaji_source_select == "전체 (모든 카테고리+섹션)":
+            _nd_articles = news_fetcher.iter_all_for_nodaji(_nd_crawled, max_per_slot=15)
+        else:
+            if not st.session_state.get("nodaji_govt_articles"):
+                with st.spinner("🏛️ 정부 RSS 수집 중..."):
+                    st.session_state["nodaji_govt_articles"] = news_fetcher.fetch_government_rss(max_total=300)
+            if not st.session_state.get("nodaji_overseas_articles"):
+                with st.spinner("🌐 해외 뉴스 RSS 수집 중..."):
+                    st.session_state["nodaji_overseas_articles"] = news_fetcher.fetch_overseas_news_rss(max_total=200)
+            _nd_articles = st.session_state["nodaji_govt_articles"] + st.session_state["nodaji_overseas_articles"]
         _nd_collected = []
         _nd_collected_kws = set(_load_keywords_history().keys()) | set(_load_blacklist().keys())
 
@@ -1025,7 +1022,8 @@ if nd_start_btn:
                 continue
 
             _nd_is_overseas = _nd_article.get("type") == "해외뉴스"
-            _nd_src_label = "🌐" if _nd_is_overseas else "🏛️"
+            _nd_type_icons = {"해외뉴스": "🌐", "정부RSS": "🏛️", "뉴스": "📰", "블로그": "✍️", "카페": "☕", "웹문서": "🌍", "지식인": "❓"}
+            _nd_src_label = _nd_type_icons.get(_nd_article.get("type", ""), "📄")
             nd_status.info(f"{_nd_src_label} [{_nd_article.get('pubDate','')}] {_nd_article['title'][:50]}...")
 
             _nd_text = f"{_nd_article['title']}\n{_nd_article.get('description', '')}".strip()

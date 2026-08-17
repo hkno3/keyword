@@ -930,14 +930,7 @@ for key in ["nodaji_keywords", "nodaji_running"]:
     if key not in st.session_state:
         st.session_state[key] = [] if key != "nodaji_running" else False
 
-col_nd_src, col_nd1, col_nd2, col_nd3 = st.columns([2, 1, 1, 1])
-with col_nd_src:
-    nodaji_source_select = st.selectbox(
-        "노다지 소스",
-        ["정부+해외", "전체 (모든 카테고리+섹션)"],
-        key="nd_source_select",
-        label_visibility="collapsed",
-    )
+col_nd1, col_nd2, col_nd3 = st.columns([1, 1, 1])
 with col_nd1:
     nodaji_target = st.number_input("찾을 키워드 수", min_value=1, value=5, step=1, key="nodaji_target_input")
 with col_nd2:
@@ -993,16 +986,7 @@ if nd_start_btn:
         naver_secret = os.getenv("NAVER_CLIENT_SECRET", "")
 
         _nd_crawled = _load_crawled_links_nodaji()
-        if nodaji_source_select == "전체 (모든 카테고리+섹션)":
-            _nd_articles = news_fetcher.iter_all_for_nodaji(_nd_crawled, max_per_slot=15)
-        else:
-            if not st.session_state.get("nodaji_govt_articles"):
-                with st.spinner("🏛️ 정부 RSS 수집 중..."):
-                    st.session_state["nodaji_govt_articles"] = news_fetcher.fetch_government_rss(max_total=300)
-            if not st.session_state.get("nodaji_overseas_articles"):
-                with st.spinner("🌐 해외 뉴스 RSS 수집 중..."):
-                    st.session_state["nodaji_overseas_articles"] = news_fetcher.fetch_overseas_news_rss(max_total=200)
-            _nd_articles = st.session_state["nodaji_govt_articles"] + st.session_state["nodaji_overseas_articles"]
+        _nd_articles = news_fetcher.iter_all_for_nodaji(_nd_crawled, max_per_slot=15)
         _nd_collected = []
         _nd_collected_kws = set(_load_keywords_history().keys()) | set(_load_blacklist().keys())
 

@@ -540,9 +540,8 @@ def fetch_overseas_news_rss(max_total: int = 200) -> list[dict]:
 
 def iter_all_for_nodaji(crawled_links: set, max_per_slot: int = 15):
     """
-    Generator: 모든 카테고리 × 섹션을 라운드로빈으로 돌며 기사 1개씩 yield.
-    슬롯별로 필요할 때만 API 호출 (지연 로딩). 이미 크롤링한 링크는 건너뜀.
-    모든 슬롯이 소진되면 종료.
+    Generator: 정부RSS + 해외뉴스 + 13카테고리×5섹션을 라운드로빈으로 yield.
+    슬롯별 지연 로딩. 이미 크롤링한 링크 자동 건너뜀.
     """
     _src_fns = [
         fetch_category_news,
@@ -551,19 +550,24 @@ def iter_all_for_nodaji(crawled_links: set, max_per_slot: int = 15):
         fetch_category_cafe,
         fetch_category_web,
     ]
-    slots = [(cat, fn) for cat in CATEGORY_QUERIES.keys() for fn in _src_fns]
-    random.shuffle(slots)
+    slot_fns = [
+        ("__govt__", lambda: fetch_government_rss(max_total=300)),
+        ("__overseas__", lambda: fetch_overseas_news_rss(max_total=200)),
+    ]
+    for cat in CATEGORY_QUERIES.keys():
+        for fn in _src_fns:
+            slot_fns.append((f"{cat}__{fn.__name__}", lambda c=cat, f=fn: f(c, max_total=max_per_slot)))
+
+    random.shuffle(slot_fns)
     caches = {}
     empty_consecutive = 0
     idx = 0
 
-    while empty_consecutive < len(slots):
-        cat, fn = slots[idx % len(slots)]
+    while empty_consecutive < len(slot_fns):
+        key, fetch_fn = slot_fns[idx % len(slot_fns)]
         idx += 1
-        key = (cat, fn.__name__)
         if key not in caches:
-            caches[key] = [a for a in fn(cat, max_total=max_per_slot)
-                           if a["link"] not in crawled_links]
+            caches[key] = [a for a in fetch_fn() if a["link"] not in crawled_links]
         if caches[key]:
             empty_consecutive = 0
             yield caches[key].pop(0)

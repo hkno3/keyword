@@ -1009,7 +1009,7 @@ if nd_start_btn:
                 continue
 
             _nd_is_overseas = _nd_article.get("type") == "해외뉴스"
-            _nd_type_icons = {"해외뉴스": "🌐", "정부RSS": "🏛️", "뉴스": "📰", "블로그": "✍️", "카페": "☕", "웹문서": "🌍", "지식인": "❓"}
+            _nd_type_icons = {"해외뉴스": "🌐", "정부RSS": "🏛️", "뉴스": "📰", "블로그": "✍️", "카페": "☕", "웹문서": "🌍", "지식인": "❓", "구글트렌드": "🔥"}
             _nd_src_label = _nd_type_icons.get(_nd_article.get("type", ""), "📄")
             nd_status.info(f"{_nd_src_label} [{_nd_article.get('pubDate','')}] {_nd_article['title'][:50]}...")
 
@@ -1020,34 +1020,38 @@ if nd_start_btn:
             if not _nd_text:
                 continue
 
-            try:
-                if _nd_is_overseas:
-                    _nd_seeds, _nd_tokens = claude_service.extract_keywords_from_english(_nd_text, _nd_groq_client)
-                else:
-                    _nd_seeds, _nd_tokens = claude_service.extract_seed_keywords(_nd_text, _nd_groq_client)
-                _add_groq_tokens(_nd_tokens)
-                _nd_seeds = [s for s in _nd_seeds if len(s.strip()) >= 2]
-            except Exception as _nd_e:
-                _nd_err = str(_nd_e)
-                if "429" in _nd_err or "rate_limit" in _nd_err.lower():
-                    _nd_groq_idx += 1
-                    if _nd_groq_idx < len(groq_keys):
-                        _nd_groq_client = Groq(api_key=groq_keys[_nd_groq_idx])
-                        try:
-                            if _nd_is_overseas:
-                                _nd_seeds, _nd_tokens = claude_service.extract_keywords_from_english(_nd_text, _nd_groq_client)
-                            else:
-                                _nd_seeds, _nd_tokens = claude_service.extract_seed_keywords(_nd_text, _nd_groq_client)
-                            _add_groq_tokens(_nd_tokens)
-                            _nd_seeds = [s for s in _nd_seeds if len(s.strip()) >= 2]
-                        except Exception:
-                            continue
+            # 구글 트렌드는 제목 자체가 키워드 → Groq 불필요
+            if _nd_article.get("type") == "구글트렌드":
+                _nd_seeds = [_nd_article["title"].strip()]
+            else:
+                try:
+                    if _nd_is_overseas:
+                        _nd_seeds, _nd_tokens = claude_service.extract_keywords_from_english(_nd_text, _nd_groq_client)
                     else:
-                        nd_status.error("🚫 모든 Groq API 키 한도 초과.")
-                        st.session_state.nodaji_running = False
-                        break
-                else:
-                    continue
+                        _nd_seeds, _nd_tokens = claude_service.extract_seed_keywords(_nd_text, _nd_groq_client)
+                    _add_groq_tokens(_nd_tokens)
+                    _nd_seeds = [s for s in _nd_seeds if len(s.strip()) >= 2]
+                except Exception as _nd_e:
+                    _nd_err = str(_nd_e)
+                    if "429" in _nd_err or "rate_limit" in _nd_err.lower():
+                        _nd_groq_idx += 1
+                        if _nd_groq_idx < len(groq_keys):
+                            _nd_groq_client = Groq(api_key=groq_keys[_nd_groq_idx])
+                            try:
+                                if _nd_is_overseas:
+                                    _nd_seeds, _nd_tokens = claude_service.extract_keywords_from_english(_nd_text, _nd_groq_client)
+                                else:
+                                    _nd_seeds, _nd_tokens = claude_service.extract_seed_keywords(_nd_text, _nd_groq_client)
+                                _add_groq_tokens(_nd_tokens)
+                                _nd_seeds = [s for s in _nd_seeds if len(s.strip()) >= 2]
+                            except Exception:
+                                continue
+                        else:
+                            nd_status.error("🚫 모든 Groq API 키 한도 초과.")
+                            st.session_state.nodaji_running = False
+                            break
+                    else:
+                        continue
 
             if not _nd_seeds:
                 continue

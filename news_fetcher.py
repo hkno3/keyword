@@ -538,6 +538,36 @@ def fetch_overseas_news_rss(max_total: int = 200) -> list[dict]:
     return results[:max_total]
 
 
+GOOGLE_TRENDS_RSS_URLS = [
+    "https://trends.google.com/trending/rss?geo=KR",
+]
+
+
+def fetch_google_trending(max_total: int = 50) -> list[dict]:
+    """구글 트렌드 급상승 키워드를 '기사' 형태로 반환 (씨드 직접 사용)."""
+    seen, results = set(), []
+    for url in GOOGLE_TRENDS_RSS_URLS:
+        try:
+            resp = requests.get(url, headers=HEADERS, timeout=10)
+            resp.raise_for_status()
+            root = ET.fromstring(resp.content)
+            for item in root.findall(".//item"):
+                title = _strip_html(item.findtext("title", "")).strip()
+                link = item.findtext("link", "")
+                if title and title not in seen:
+                    seen.add(title)
+                    results.append({
+                        "title": title,
+                        "link": link,
+                        "description": title,
+                        "pubDate": "",
+                        "type": "구글트렌드",
+                    })
+        except Exception:
+            pass
+    return results[:max_total]
+
+
 def iter_all_for_nodaji(crawled_links: set, max_per_slot: int = 15):
     """
     Generator: 정부RSS + 해외뉴스 + 13카테고리×5섹션을 라운드로빈으로 yield.
@@ -551,6 +581,7 @@ def iter_all_for_nodaji(crawled_links: set, max_per_slot: int = 15):
         fetch_category_web,
     ]
     slot_fns = [
+        ("__google_trends__", lambda: fetch_google_trending(max_total=50)),
         ("__govt__", lambda: fetch_government_rss(max_total=300)),
         ("__overseas__", lambda: fetch_overseas_news_rss(max_total=200)),
     ]

@@ -77,10 +77,10 @@ class NaverSearchSession:
 
     def __init__(
         self,
-        min_delay: float = 2.0,
-        max_delay: float = 5.0,
+        min_delay: float = 7.0,
+        max_delay: float = 15.0,
         max_consecutive_failures: int = 3,
-        page_wait: float = 1.5,
+        page_wait: float = 2.5,
     ):
         self.min_delay = min_delay
         self.max_delay = max_delay
@@ -182,6 +182,13 @@ class NaverSearchSession:
             search_box.press("Enter")
             self._page.wait_for_load_state("domcontentloaded", timeout=15000)
             time.sleep(self.page_wait)
+
+            # Random scroll like a human reading results
+            scroll_amount = random.randint(300, 900)
+            self._page.evaluate(f"window.scrollBy(0, {scroll_amount})")
+            time.sleep(random.uniform(1.0, 2.5))
+            self._page.evaluate(f"window.scrollBy(0, {random.randint(-200, 200)})")
+            time.sleep(random.uniform(0.5, 1.5))
 
             if _detect_block(self._page):
                 self._consecutive_failures += 1

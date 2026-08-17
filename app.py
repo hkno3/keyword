@@ -993,7 +993,7 @@ if nd_start_btn:
         nd_status = st.empty()
         nd_progress = st.progress(0)
         _nd_pw_session = naver_playwright.NaverSearchSession(
-            min_delay=2.0, max_delay=5.0, max_consecutive_failures=3
+            min_delay=7.0, max_delay=15.0, max_consecutive_failures=3
         )
         _nd_pw_session.start()
 

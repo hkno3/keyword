@@ -1055,15 +1055,30 @@ if nd_start_btn:
             nd_status.info(f"📊 검색량 조회 중: {', '.join(_nd_seeds[:3])}...")
             _nd_vol_data = naver_api.get_search_volumes_batch(_nd_seeds, customer_id, ad_key, ad_secret)
 
-            for _nd_kw, _nd_vol in _nd_vol_data.items():
+            # 검색량 300 이상만 추려서 문서수 조회
+            _nd_vol_filtered = {
+                kw: vol for kw, vol in _nd_vol_data.items()
+                if vol.get("total_search", 0) >= 300 and kw not in _nd_collected_kws
+            }
+            if not _nd_vol_filtered:
+                continue
+
+            nd_status.info(f"📄 문서수 조회 중: {', '.join(list(_nd_vol_filtered.keys())[:3])}...")
+            _nd_doc_data = naver_api.get_doc_counts_parallel(list(_nd_vol_filtered.keys()), naver_id, naver_secret)
+
+            # 별 5개(ratio < 0.5, 매우 낮음)만 Playwright 체크 대상
+            _nd_candidates = {
+                kw: vol for kw, vol in _nd_vol_filtered.items()
+                if naver_api.competition_level(vol.get("total_search", 0), _nd_doc_data.get(kw, 999999))[0] == "매우 낮음"
+            }
+            if not _nd_candidates:
+                continue
+
+            for _nd_kw, _nd_vol in _nd_candidates.items():
                 if not st.session_state.nodaji_running:
                     break
                 if len(_nd_collected) >= nodaji_target:
                     break
-                if _nd_kw in _nd_collected_kws:
-                    continue
-                if _nd_vol.get("total_search", 0) < 300:
-                    continue
                 if _nd_pw_session.is_blocked():
                     nd_status.error("🚫 네이버 봇 감지! 잠시 후 재시도하거나 IP를 바꿔주세요.")
                     st.session_state.nodaji_running = False
@@ -1080,8 +1095,8 @@ if nd_start_btn:
                     continue
                 if not _nd_pw_result.get("is_nodaji"):
                     continue
-                nd_status.info(f"💎 노다지 발견! {_nd_kw} — 문서수 조회 중...")
-                _nd_doc = naver_api.get_doc_counts_parallel([_nd_kw], naver_id, naver_secret).get(_nd_kw, 0)
+                nd_status.info(f"💎 노다지 발견! {_nd_kw}")
+                _nd_doc = _nd_doc_data.get(_nd_kw, 0)
                 _nd_row = naver_api.build_keyword_table({_nd_kw: _nd_vol}, {_nd_kw: _nd_doc})
                 if _nd_row:
                     _nd_r = dict(_nd_row[0])

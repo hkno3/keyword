@@ -995,7 +995,10 @@ if nd_start_btn:
         _nd_pw_session = naver_playwright.NaverSearchSession(
             min_delay=7.0, max_delay=15.0, max_consecutive_failures=3
         )
+        nd_status.info("🌐 크롬 창 열리는 중... 네이버 로그인이 필요하면 직접 로그인해주세요. (최대 3분 대기)")
         _nd_pw_session.start()
+        if _nd_pw_session.login_required is False and not _nd_pw_session.is_blocked():
+            nd_status.success("✅ 네이버 로그인 완료! 키워드 검색을 시작합니다.")
 
         for _nd_article in _nd_articles:
             if not st.session_state.nodaji_running:

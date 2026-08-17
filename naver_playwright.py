@@ -214,15 +214,19 @@ class NaverSearchSession:
     def _random_delay(self):
         time.sleep(random.uniform(self.min_delay, self.max_delay))
 
-    def _restart(self):
-        """브라우저 완전 종료 후 재시작 — 세션 카운터 초기화."""
+    def _close_browser(self):
+        """브라우저만 종료 (재시작은 다음 check_nodaji 호출 시)."""
         self.stop()
-        time.sleep(random.uniform(8, 15))  # 재시작 전 충분히 대기
         self._playwright = None
         self._browser = None
         self._context = None
         self._page = None
-        self.start()
+
+    def _ensure_browser(self):
+        """브라우저가 없으면 새로 시작."""
+        if self._page is None:
+            time.sleep(random.uniform(8, 15))
+            self.start()
 
     # ── public API ─────────────────────────────────────────
 
@@ -244,10 +248,10 @@ class NaverSearchSession:
             result["error"] = "bot_detected"
             return result
 
-        # restart_every 번 검색마다 브라우저 재시작
-        if self.restart_every > 0 and self._total_checks > 0 and self._total_checks % self.restart_every == 0:
-            self._restart()
-        elif self._total_checks > 0:
+        # 브라우저가 닫혀 있으면 재시작 (이전 검색 후 종료된 경우)
+        self._ensure_browser()
+
+        if self._total_checks > 0:
             self._random_delay()
 
         try:
@@ -304,6 +308,10 @@ class NaverSearchSession:
                 result["has_news"],
                 result["has_shopping"],
             ])
+
+            # restart_every 검색 완료 시 브라우저 즉시 종료
+            if self.restart_every > 0 and self._total_checks % self.restart_every == 0:
+                self._close_browser()
 
         except Exception as e:
             self._consecutive_failures += 1

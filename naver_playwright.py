@@ -97,7 +97,7 @@ class NaverSearchSession:
 
     def start(self):
         self._playwright = sync_playwright().start()
-        self._browser = self._playwright.chromium.launch(headless=True)
+        self._browser = self._playwright.chromium.launch(headless=False)
         self._page = self._browser.new_page(user_agent=_USER_AGENT)
         return self
 

@@ -8,11 +8,27 @@ _BLOCK_TEXT_PATTERNS = [
     "비정상적인 트래픽", "captcha", "robot check",
 ]
 _BLOCK_SELECTORS = ["#captcha", ".captcha_wrap", "[class*='captcha']", "#robot_check"]
-_USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/120.0.0.0 Safari/537.36"
-)
+_USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+]
+
+_STEALTH_SCRIPT = """
+() => {
+    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+    Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+    Object.defineProperty(navigator, 'languages', { get: () => ['ko-KR', 'ko', 'en-US', 'en'] });
+    window.chrome = { runtime: {}, loadTimes: function(){}, csi: function(){}, app: {} };
+    const originalQuery = window.navigator.permissions.query;
+    window.navigator.permissions.query = (p) =>
+        p.name === 'notifications'
+            ? Promise.resolve({ state: Notification.permission })
+            : originalQuery(p);
+}
+"""
 
 
 def _detect_block(page) -> bool:
@@ -97,8 +113,19 @@ class NaverSearchSession:
 
     def start(self):
         self._playwright = sync_playwright().start()
-        self._browser = self._playwright.chromium.launch(headless=False)
-        self._page = self._browser.new_page(user_agent=_USER_AGENT)
+        self._browser = self._playwright.chromium.launch(
+            headless=False,
+            args=["--disable-blink-features=AutomationControlled"],
+        )
+        viewport = {"width": random.choice([1280, 1366, 1440, 1920]), "height": random.choice([768, 800, 900, 1080])}
+        ctx = self._browser.new_context(
+            user_agent=random.choice(_USER_AGENTS),
+            viewport=viewport,
+            locale="ko-KR",
+            timezone_id="Asia/Seoul",
+        )
+        self._page = ctx.new_page()
+        self._page.add_init_script(_STEALTH_SCRIPT)
         return self
 
     def stop(self):

@@ -13,7 +13,6 @@ import naver_api
 import claude_service
 import gemini_service
 import news_fetcher
-import naver_playwright
 import wp_service
 import sitemap_service
 
@@ -954,7 +953,6 @@ def _render_nodaji_table(keywords):
         "경쟁정도(AD)": r.get("comp_idx", "N/A"),
         "문서수": f"{r['doc_count']:,}",
         "추천도": r["stars"],
-        "네이버검증": "광고✗ 뷰✗ 뉴스✗ 쇼핑✗",
     } for r in keywords])
     with nodaji_table_box.container():
         st.success(f"💎 {len(keywords)}개 노다지 키워드 발굴!")
@@ -992,13 +990,6 @@ if nd_start_btn:
 
         nd_status = st.empty()
         nd_progress = st.progress(0)
-        _nd_pw_session = naver_playwright.NaverSearchSession(
-            min_delay=7.0, max_delay=15.0, max_consecutive_failures=3
-        )
-        nd_status.info("🌐 크롬 창 열리는 중... 네이버 로그인이 필요하면 직접 로그인해주세요. (최대 3분 대기)")
-        _nd_pw_session.start()
-        if _nd_pw_session.login_required is False and not _nd_pw_session.is_blocked():
-            nd_status.success("✅ 네이버 로그인 완료! 키워드 검색을 시작합니다.")
 
         for _nd_article in _nd_articles:
             if not st.session_state.nodaji_running:
@@ -1070,7 +1061,7 @@ if nd_start_btn:
             nd_status.info(f"📄 문서수 조회 중: {', '.join(list(_nd_vol_filtered.keys())[:3])}...")
             _nd_doc_data = naver_api.get_doc_counts_parallel(list(_nd_vol_filtered.keys()), naver_id, naver_secret)
 
-            # 별 5개(ratio < 0.5, 매우 낮음)만 Playwright 체크 대상
+            # 별 5개(ratio < 0.5, 매우 낮음) → 노다지 후보
             _nd_candidates = {
                 kw: vol for kw, vol in _nd_vol_filtered.items()
                 if naver_api.competition_level(vol.get("total_search", 0), _nd_doc_data.get(kw, 999999))[0] == "매우 낮음"
@@ -1083,23 +1074,7 @@ if nd_start_btn:
                     break
                 if len(_nd_collected) >= nodaji_target:
                     break
-                if _nd_pw_session.is_blocked():
-                    nd_status.error("🚫 네이버 봇 감지! 잠시 후 재시도하거나 IP를 바꿔주세요.")
-                    st.session_state.nodaji_running = False
-                    break
-                nd_status.info(f"🔍 네이버 검색 확인 중: {_nd_kw}")
-                _nd_pw_result = _nd_pw_session.check_nodaji(_nd_kw)
-                if _nd_pw_result.get("blocked"):
-                    nd_status.warning(
-                        f"⚠️ 봇 감지 경고 ({_nd_kw}) — "
-                        f"연속 실패 {_nd_pw_session.consecutive_failures}/{_nd_pw_session.max_consecutive_failures}"
-                    )
-                    continue
-                if _nd_pw_result.get("error"):
-                    continue
-                if not _nd_pw_result.get("is_nodaji"):
-                    continue
-                nd_status.info(f"💎 노다지 발견! {_nd_kw}")
+                nd_status.info(f"💎 노다지 후보 발견! {_nd_kw}")
                 _nd_doc = _nd_doc_data.get(_nd_kw, 0)
                 _nd_row = naver_api.build_keyword_table({_nd_kw: _nd_vol}, {_nd_kw: _nd_doc})
                 if _nd_row:
@@ -1113,7 +1088,6 @@ if nd_start_btn:
             nd_progress.progress(min(len(_nd_collected) / nodaji_target, 1.0))
             _render_nodaji_table(_nd_collected)
 
-        _nd_pw_session.stop()
         st.session_state.nodaji_running = False
         nd_status.empty()
         nd_progress.empty()
@@ -1149,6 +1123,99 @@ if nd_start_btn:
         else:
             st.warning("노다지 키워드를 찾지 못했어요. 다른 카테고리/소스를 시도해보세요.")
         st.rerun()
+
+# ── GPT 브리핑 노다지 찾기 ────────────────────────────────
+st.divider()
+st.subheader("📋 GPT 브리핑으로 노다지 찾기")
+st.caption("GPT가 매일 올려주는 검색어 브리핑을 붙여넣으면 롱테일 후보 키워드를 추출해 별 5개 노다지를 찾아줍니다.")
+
+if "briefing_nodaji_keywords" not in st.session_state:
+    st.session_state.briefing_nodaji_keywords = []
+
+_brf_col1, _brf_col2 = st.columns([4, 1])
+with _brf_col1:
+    briefing_text_input = st.text_area(
+        "GPT 브리핑 붙여넣기",
+        height=180,
+        placeholder="GPT 브리핑 텍스트를 여기에 붙여넣으세요...",
+        label_visibility="collapsed",
+        key="briefing_text_input",
+    )
+with _brf_col2:
+    brf_target = st.number_input("최대 키워드 수", min_value=1, value=20, step=1, key="brf_target")
+    brf_btn = st.button("🔍 노다지 분석", type="primary", use_container_width=True, key="brf_btn")
+
+if st.session_state.briefing_nodaji_keywords:
+    _brf_df = pd.DataFrame([{
+        "키워드": r["keyword"],
+        "검색": f"https://search.naver.com/search.naver?query={r['keyword']}",
+        "월검색(합계)": f"{r['total_search']:,}",
+        "문서수": f"{r['doc_count']:,}",
+        "추천도": r["stars"],
+    } for r in st.session_state.briefing_nodaji_keywords])
+    st.success(f"💎 {len(st.session_state.briefing_nodaji_keywords)}개 노다지 후보!")
+    st.dataframe(_brf_df, hide_index=True, use_container_width=True,
+                 column_config={"검색": st.column_config.LinkColumn("검색", display_text="🔍 네이버")})
+    if st.button("📥 히스토리에 저장", key="brf_save_btn"):
+        _brf_saved = _save_keywords_to_history([{**r, "is_parent": True} for r in st.session_state.briefing_nodaji_keywords])
+        st.success(f"✅ {_brf_saved}개 히스토리에 저장됐습니다.")
+        st.session_state.briefing_nodaji_keywords = []
+        st.rerun()
+
+if brf_btn:
+    if not groq_key:
+        st.error("Groq API 키를 입력해주세요.")
+    elif not briefing_text_input.strip():
+        st.warning("브리핑 텍스트를 붙여넣어주세요.")
+    else:
+        customer_id = os.getenv("NAVER_AD_CUSTOMER_ID", "")
+        ad_key = os.getenv("NAVER_AD_API_KEY", "")
+        ad_secret = os.getenv("NAVER_AD_SECRET_KEY", "")
+        naver_id = os.getenv("NAVER_CLIENT_ID", "")
+        naver_secret = os.getenv("NAVER_CLIENT_SECRET", "")
+        _brf_groq = Groq(api_key=groq_keys[0])
+
+        _brf_status = st.empty()
+        _brf_status.info("🤖 Groq로 롱테일 키워드 추출 중...")
+        try:
+            _brf_seeds, _brf_tokens = claude_service.extract_seed_keywords(briefing_text_input.strip(), _brf_groq)
+            _add_groq_tokens(_brf_tokens)
+            _brf_seeds = [s for s in _brf_seeds if len(s.strip()) >= 2]
+        except Exception as _brf_e:
+            _brf_status.error(f"❌ 키워드 추출 실패: {_brf_e}")
+            _brf_seeds = []
+
+        if not _brf_seeds:
+            _brf_status.warning("키워드를 추출하지 못했어요.")
+        else:
+            _brf_status.info(f"📊 검색량 조회 중: {', '.join(_brf_seeds[:5])}... (총 {len(_brf_seeds)}개)")
+            _brf_vol = naver_api.get_search_volumes_batch(_brf_seeds, customer_id, ad_key, ad_secret)
+            _existing_kws_brf = set(_load_keywords_history().keys()) | set(_load_blacklist().keys())
+            _brf_vol_filtered = {
+                kw: vol for kw, vol in _brf_vol.items()
+                if vol.get("total_search", 0) >= 300 and kw not in _existing_kws_brf
+            }
+            if not _brf_vol_filtered:
+                _brf_status.warning("검색량 300 이상 신규 키워드가 없어요.")
+            else:
+                _brf_status.info(f"📄 문서수 조회 중: {len(_brf_vol_filtered)}개...")
+                _brf_doc = naver_api.get_doc_counts_parallel(list(_brf_vol_filtered.keys()), naver_id, naver_secret)
+                _brf_candidates = {
+                    kw: vol for kw, vol in _brf_vol_filtered.items()
+                    if naver_api.competition_level(vol.get("total_search", 0), _brf_doc.get(kw, 999999))[0] == "매우 낮음"
+                }
+                if not _brf_candidates:
+                    _brf_status.warning(f"별 5개 키워드가 없어요. ({len(_brf_vol_filtered)}개 중 0개)")
+                else:
+                    _brf_results = []
+                    for _bkw, _bvol in list(_brf_candidates.items())[:brf_target]:
+                        _bdoc = _brf_doc.get(_bkw, 0)
+                        _brow = naver_api.build_keyword_table({_bkw: _bvol}, {_bkw: _bdoc})
+                        if _brow:
+                            _brf_results.append(dict(_brow[0]))
+                    st.session_state.briefing_nodaji_keywords = _brf_results
+                    _brf_status.empty()
+                    st.rerun()
 
 # ── 2차 검색: 황금 롱테일 키워드 ─────────────────────────
 st.divider()

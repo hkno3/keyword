@@ -13,7 +13,6 @@ import naver_api
 import claude_service
 import gemini_service
 import news_fetcher
-import naver_playwright
 import wp_service
 import sitemap_service
 
@@ -921,6 +920,101 @@ if start_btn:
             st.session_state.auto_save_pending = False
         st.rerun()
 
+# ── 시즌성 키워드 찾기 ─────────────────────────────────────
+st.divider()
+st.subheader("🗓️ 시즌성 키워드 찾기")
+st.caption("월별 시즌 키워드를 선택해 검색량·문서수·클릭률을 조회합니다.")
+
+_SEASON_KEYWORDS = {
+    1:  ["새해 인사말 문자","신년 운세","새해 목표","새해 다이어리 추천","연말정산 공제 항목","연말정산 환급금","연말정산 간소화","독감 증상","타미플루 처방","수도 동파 예방","보일러 동파 응급처치","전기장판 추천","핫팩 추천","겨울 패딩 추천","겨울 이불 추천","수시 합격자 발표","정시 원서 접수"],
+    2:  ["설날 차례상 차림","설날 음식 종류","설날 세뱃돈 봉투","세뱃돈 적정 금액","설날 선물 추천","시댁 설날 선물","부모님 설날 선물","설 연휴 여행지","명절 증후군","졸업식 꽃다발 가격","졸업 선물 추천","졸업 축하 문구","발렌타인데이 남자친구 선물","발렌타인 초콜릿 만들기","발렌타인 카드 문구","개학 준비물"],
+    3:  ["초등학교 입학 준비물","중학교 입학 준비물","고등학교 입학 준비물","새학기 가방 추천","새학기 문구 추천","새학기 적응","화이트데이 여자친구 선물","화이트데이 사탕 만들기","화이트데이 카드 문구","봄 알레르기 증상","환절기 감기 예방","전국 봄꽃 명소","봄 나들이 옷차림","공채 일정","자기소개서 작성","면접 옷차림"],
+    4:  ["전국 벚꽃 명소","벚꽃 드라이브 코스","벚꽃 축제 일정","벚꽃 개화 시기","봄 국내 여행지","봄 등산 코스","봄 나들이 도시락 메뉴","황사 마스크 추천","미세먼지 공기청정기 추천","미세먼지 대처","봄 아우터 추천","봄 가디건 코디","봄 이불 추천","식목일 나무 종류"],
+    5:  ["나이별 어린이날 선물","어린이날 놀이공원 할인","어린이날 이벤트","아이와 가볼 만한 곳","부모님 어버이날 선물","어버이날 카네이션 만들기","어버이날 문자 문구","어버이날 용돈 금액","스승의날 선물","스승의날 카드 문구","가정의달 가족 여행지","가족사진 촬영","성년의날 선물","황금연휴 여행지"],
+    6:  ["에어컨 청소","에어컨 필터 교체","에어컨 가스 충전 가격","에어컨 설치 비용","제습기 추천","장마 대비 용품","우산 추천","장마철 습기 제거","현충일 공휴일","자외선 차단제 추천","선글라스 추천","여름 이불 추천","보양식 추천","삼계탕 만들기"],
+    7:  ["여름 국내 여행지","여름 해외 여행지","여름 여행 짐 싸기","초복 중복 말복 날짜","복날 보양식","삼계탕 맛집","장마 기간","장마철 빨래 냄새","장마철 식중독 예방","워터파크 추천","계곡 물놀이","물놀이 준비물","전국 피서지","해수욕장 추천","여름 캠핑 준비물","모기 기피제 추천"],
+    8:  ["바다 여행지 추천","전국 계곡 여행지","여름 제주도 여행","광복절 공휴일","광복절 행사","여름방학 아이 체험 활동","여름방학 학원","태풍 대비","태풍 피해 보험 청구","2학기 준비물"],
+    9:  ["추석 차례상 차림","추석 음식 종류","추석 상차리기","추석 차례 순서","시댁 추석 선물","부모님 추석 선물","추석 선물 세트","추석 꽃감말이 선물","지방 쓰기","벌초 대행 가격","벌초 비용","추석 연휴 여행지","추석 문 여는 약국","추석 연휴 병원","추석 인사말 문자","송이 시세","송이버섯 등급","대하 축제","전어 구이 맛집"],
+    10: ["전국 단풍 명소","단풍 드라이브 코스","단풍 절정 시기","10월 축제","10월 가볼 만한 곳","10월 제주도 가볼 만한 곳","백제문화제","공주 백제문화축제","부여 백제문화축제","화담숲 예약","진주 유등축제","자라섬 꽃축제","여의도 불꽃축제 명당","가평 가볼 만한 곳","독감 예방접종 시기","독감 주사 가격","할로윈 코스튬 추천","할로윈 파티 음식","고구마 10키로 가격","밤 까는 도구","이불 압축팩"],
+    11: ["수능 당일 주의사항","수능 선물","수능 도시락","수능 후 여행","빼빼로데이 선물","빼빼로 만들기","김장 재료 목록","김장 배추 가격","김장 순서","김장 비용","겨울 코트 추천","패딩 추천","난방비 절약","보일러 점검","가을 등산 코스","이불 세탁"],
+    12: ["크리스마스 선물 추천","크리스마스 데이트 코스","크리스마스 케이크 주문","크리스마스 트리 꾸미기","송년회 장소","연말 파티 음식","연말 선물","연말정산 공제 항목","연말정산 환급금 계산","겨울 여행지","스키장 리프트권 가격","온천 여행지","연하장 문구","연말 인사말"],
+}
+_MONTH_NAMES = {1:"1월",2:"2월",3:"3월",4:"4월",5:"5월",6:"6월",7:"7월",8:"8월",9:"9월",10:"10월",11:"11월",12:"12월"}
+
+for _sk in ["season_month","season_vol_result","season_doc_result","season_selected_kws"]:
+    if _sk not in st.session_state:
+        st.session_state[_sk] = None if _sk in ("season_month","season_vol_result","season_doc_result") else []
+
+# 월 버튼
+_s_cols = st.columns(12)
+for _mi, _mc in enumerate(_s_cols):
+    with _mc:
+        if st.button(_MONTH_NAMES[_mi+1], key=f"smonth_{_mi+1}", use_container_width=True,
+                     type="primary" if st.session_state.season_month == _mi+1 else "secondary"):
+            st.session_state.season_month = _mi+1
+            st.session_state.season_vol_result = None
+            st.session_state.season_doc_result = None
+            st.session_state.season_selected_kws = []
+            st.rerun()
+
+if st.session_state.season_month:
+    _sm = st.session_state.season_month
+    _skws = _SEASON_KEYWORDS[_sm]
+
+    # 키워드 체크박스
+    st.markdown(f"**{_MONTH_NAMES[_sm]} 키워드 목록**")
+    _s_check_cols = st.columns(3)
+    _s_selected = []
+    _s_all = st.checkbox("전체 선택", key="season_all_check")
+    for _si, _skw in enumerate(_skws):
+        with _s_check_cols[_si % 3]:
+            if st.checkbox(_skw, value=_s_all, key=f"skw_{_sm}_{_si}"):
+                _s_selected.append(_skw)
+
+    if st.button("📊 조회", type="primary", disabled=len(_s_selected)==0, key="season_query_btn"):
+        customer_id = os.getenv("NAVER_AD_CUSTOMER_ID","")
+        ad_key = os.getenv("NAVER_AD_API_KEY","")
+        ad_secret = os.getenv("NAVER_AD_SECRET_KEY","")
+        naver_id = os.getenv("NAVER_CLIENT_ID","")
+        naver_secret = os.getenv("NAVER_CLIENT_SECRET","")
+        with st.spinner("검색량 조회 중..."):
+            _sv = naver_api.get_search_volumes_batch(_s_selected, customer_id, ad_key, ad_secret)
+        with st.spinner("문서수 조회 중..."):
+            _sd = naver_api.get_doc_counts_parallel(list(_sv.keys()), naver_id, naver_secret)
+        st.session_state.season_vol_result = _sv
+        st.session_state.season_doc_result = _sd
+        st.session_state.season_selected_kws = []
+        st.rerun()
+
+# 조회 결과 표시
+if st.session_state.season_vol_result:
+    _sv = st.session_state.season_vol_result
+    _sd = st.session_state.season_doc_result or {}
+    _s_table = naver_api.build_keyword_table(_sv, _sd)
+
+    st.markdown("**조회 결과 — 저장할 키워드를 선택하세요**")
+    _s_save_selected = []
+    _s_all2 = st.checkbox("전체 선택", key="season_result_all")
+    for _sr in _s_table:
+        _level, _stars, _ = naver_api.competition_level(_sr["total_search"], _sr["doc_count"])
+        _label = f"{_sr['keyword']} | 검색 {_sr['total_search']:,} | 문서 {_sr['doc_count']:,} | 클릭률 {_sr['mobile_ctr']}% | {_stars}"
+        if st.checkbox(_label, value=_s_all2, key=f"sres_{_sr['keyword']}"):
+            _s_save_selected.append(_sr)
+
+    if st.button("📥 히스토리 저장 + 자식 키워드 수집", type="primary",
+                 disabled=len(_s_save_selected)==0, key="season_save_btn"):
+        _s_added = _save_keywords_to_history([{**r, "is_parent": True} for r in _s_save_selected])
+        _s_ck_total = 0
+        with st.spinner("자식 키워드 수집 중..."):
+            for _sr2 in _s_save_selected:
+                _sac = naver_api.get_autocomplete(_sr2["keyword"])
+                if _sac:
+                    _s_ck_total += _add_to_child_keywords(_sr2["keyword"], _sac)
+        st.success(f"✅ 부모 키워드 {_s_added}개 히스토리 저장 | 자식 키워드 {_s_ck_total}개 저장")
+        st.session_state.season_vol_result = None
+        st.session_state.season_doc_result = None
+        st.rerun()
+
 # ── 노다지 키워드 찾기 ─────────────────────────────────────
 st.divider()
 st.subheader("💎 노다지 키워드 찾기")
@@ -954,7 +1048,6 @@ def _render_nodaji_table(keywords):
         "경쟁정도(AD)": r.get("comp_idx", "N/A"),
         "문서수": f"{r['doc_count']:,}",
         "추천도": r["stars"],
-        "네이버검증": "광고✗ 뷰✗ 뉴스✗ 쇼핑✗",
     } for r in keywords])
     with nodaji_table_box.container():
         st.success(f"💎 {len(keywords)}개 노다지 키워드 발굴!")
@@ -992,13 +1085,6 @@ if nd_start_btn:
 
         nd_status = st.empty()
         nd_progress = st.progress(0)
-        _nd_pw_session = naver_playwright.NaverSearchSession(
-            min_delay=7.0, max_delay=15.0, max_consecutive_failures=3
-        )
-        nd_status.info("🌐 크롬 창 열리는 중... 네이버 로그인이 필요하면 직접 로그인해주세요. (최대 3분 대기)")
-        _nd_pw_session.start()
-        if _nd_pw_session.login_required is False and not _nd_pw_session.is_blocked():
-            nd_status.success("✅ 네이버 로그인 완료! 키워드 검색을 시작합니다.")
 
         for _nd_article in _nd_articles:
             if not st.session_state.nodaji_running:
@@ -1070,7 +1156,7 @@ if nd_start_btn:
             nd_status.info(f"📄 문서수 조회 중: {', '.join(list(_nd_vol_filtered.keys())[:3])}...")
             _nd_doc_data = naver_api.get_doc_counts_parallel(list(_nd_vol_filtered.keys()), naver_id, naver_secret)
 
-            # 별 5개(ratio < 0.5, 매우 낮음)만 Playwright 체크 대상
+            # 별 5개(ratio < 0.5, 매우 낮음) → 노다지 후보
             _nd_candidates = {
                 kw: vol for kw, vol in _nd_vol_filtered.items()
                 if naver_api.competition_level(vol.get("total_search", 0), _nd_doc_data.get(kw, 999999))[0] == "매우 낮음"
@@ -1083,23 +1169,7 @@ if nd_start_btn:
                     break
                 if len(_nd_collected) >= nodaji_target:
                     break
-                if _nd_pw_session.is_blocked():
-                    nd_status.error("🚫 네이버 봇 감지! 잠시 후 재시도하거나 IP를 바꿔주세요.")
-                    st.session_state.nodaji_running = False
-                    break
-                nd_status.info(f"🔍 네이버 검색 확인 중: {_nd_kw}")
-                _nd_pw_result = _nd_pw_session.check_nodaji(_nd_kw)
-                if _nd_pw_result.get("blocked"):
-                    nd_status.warning(
-                        f"⚠️ 봇 감지 경고 ({_nd_kw}) — "
-                        f"연속 실패 {_nd_pw_session.consecutive_failures}/{_nd_pw_session.max_consecutive_failures}"
-                    )
-                    continue
-                if _nd_pw_result.get("error"):
-                    continue
-                if not _nd_pw_result.get("is_nodaji"):
-                    continue
-                nd_status.info(f"💎 노다지 발견! {_nd_kw}")
+                nd_status.info(f"💎 노다지 후보 발견! {_nd_kw}")
                 _nd_doc = _nd_doc_data.get(_nd_kw, 0)
                 _nd_row = naver_api.build_keyword_table({_nd_kw: _nd_vol}, {_nd_kw: _nd_doc})
                 if _nd_row:
@@ -1113,7 +1183,6 @@ if nd_start_btn:
             nd_progress.progress(min(len(_nd_collected) / nodaji_target, 1.0))
             _render_nodaji_table(_nd_collected)
 
-        _nd_pw_session.stop()
         st.session_state.nodaji_running = False
         nd_status.empty()
         nd_progress.empty()
@@ -1149,6 +1218,99 @@ if nd_start_btn:
         else:
             st.warning("노다지 키워드를 찾지 못했어요. 다른 카테고리/소스를 시도해보세요.")
         st.rerun()
+
+# ── GPT 브리핑 노다지 찾기 ────────────────────────────────
+st.divider()
+st.subheader("📋 GPT 브리핑으로 노다지 찾기")
+st.caption("GPT가 매일 올려주는 검색어 브리핑을 붙여넣으면 롱테일 후보 키워드를 추출해 별 5개 노다지를 찾아줍니다.")
+
+if "briefing_nodaji_keywords" not in st.session_state:
+    st.session_state.briefing_nodaji_keywords = []
+
+_brf_col1, _brf_col2 = st.columns([4, 1])
+with _brf_col1:
+    briefing_text_input = st.text_area(
+        "GPT 브리핑 붙여넣기",
+        height=180,
+        placeholder="GPT 브리핑 텍스트를 여기에 붙여넣으세요...",
+        label_visibility="collapsed",
+        key="briefing_text_input",
+    )
+with _brf_col2:
+    brf_target = st.number_input("최대 키워드 수", min_value=1, value=20, step=1, key="brf_target")
+    brf_btn = st.button("🔍 노다지 분석", type="primary", use_container_width=True, key="brf_btn")
+
+if st.session_state.briefing_nodaji_keywords:
+    _brf_df = pd.DataFrame([{
+        "키워드": r["keyword"],
+        "검색": f"https://search.naver.com/search.naver?query={r['keyword']}",
+        "월검색(합계)": f"{r['total_search']:,}",
+        "문서수": f"{r['doc_count']:,}",
+        "추천도": r["stars"],
+    } for r in st.session_state.briefing_nodaji_keywords])
+    st.success(f"💎 {len(st.session_state.briefing_nodaji_keywords)}개 노다지 후보!")
+    st.dataframe(_brf_df, hide_index=True, use_container_width=True,
+                 column_config={"검색": st.column_config.LinkColumn("검색", display_text="🔍 네이버")})
+    if st.button("📥 히스토리에 저장", key="brf_save_btn"):
+        _brf_saved = _save_keywords_to_history([{**r, "is_parent": True} for r in st.session_state.briefing_nodaji_keywords])
+        st.success(f"✅ {_brf_saved}개 히스토리에 저장됐습니다.")
+        st.session_state.briefing_nodaji_keywords = []
+        st.rerun()
+
+if brf_btn:
+    if not groq_key:
+        st.error("Groq API 키를 입력해주세요.")
+    elif not briefing_text_input.strip():
+        st.warning("브리핑 텍스트를 붙여넣어주세요.")
+    else:
+        customer_id = os.getenv("NAVER_AD_CUSTOMER_ID", "")
+        ad_key = os.getenv("NAVER_AD_API_KEY", "")
+        ad_secret = os.getenv("NAVER_AD_SECRET_KEY", "")
+        naver_id = os.getenv("NAVER_CLIENT_ID", "")
+        naver_secret = os.getenv("NAVER_CLIENT_SECRET", "")
+        _brf_groq = Groq(api_key=groq_keys[0])
+
+        _brf_status = st.empty()
+        _brf_status.info("🤖 Groq로 롱테일 키워드 추출 중...")
+        try:
+            _brf_seeds, _brf_tokens = claude_service.extract_seed_keywords(briefing_text_input.strip(), _brf_groq)
+            _add_groq_tokens(_brf_tokens)
+            _brf_seeds = [s for s in _brf_seeds if len(s.strip()) >= 2]
+        except Exception as _brf_e:
+            _brf_status.error(f"❌ 키워드 추출 실패: {_brf_e}")
+            _brf_seeds = []
+
+        if not _brf_seeds:
+            _brf_status.warning("키워드를 추출하지 못했어요.")
+        else:
+            _brf_status.info(f"📊 검색량 조회 중: {', '.join(_brf_seeds[:5])}... (총 {len(_brf_seeds)}개)")
+            _brf_vol = naver_api.get_search_volumes_batch(_brf_seeds, customer_id, ad_key, ad_secret)
+            _existing_kws_brf = set(_load_keywords_history().keys()) | set(_load_blacklist().keys())
+            _brf_vol_filtered = {
+                kw: vol for kw, vol in _brf_vol.items()
+                if vol.get("total_search", 0) >= 300 and kw not in _existing_kws_brf
+            }
+            if not _brf_vol_filtered:
+                _brf_status.warning("검색량 300 이상 신규 키워드가 없어요.")
+            else:
+                _brf_status.info(f"📄 문서수 조회 중: {len(_brf_vol_filtered)}개...")
+                _brf_doc = naver_api.get_doc_counts_parallel(list(_brf_vol_filtered.keys()), naver_id, naver_secret)
+                _brf_candidates = {
+                    kw: vol for kw, vol in _brf_vol_filtered.items()
+                    if naver_api.competition_level(vol.get("total_search", 0), _brf_doc.get(kw, 999999))[0] == "매우 낮음"
+                }
+                if not _brf_candidates:
+                    _brf_status.warning(f"별 5개 키워드가 없어요. ({len(_brf_vol_filtered)}개 중 0개)")
+                else:
+                    _brf_results = []
+                    for _bkw, _bvol in list(_brf_candidates.items())[:brf_target]:
+                        _bdoc = _brf_doc.get(_bkw, 0)
+                        _brow = naver_api.build_keyword_table({_bkw: _bvol}, {_bkw: _bdoc})
+                        if _brow:
+                            _brf_results.append(dict(_brow[0]))
+                    st.session_state.briefing_nodaji_keywords = _brf_results
+                    _brf_status.empty()
+                    st.rerun()
 
 # ── 2차 검색: 황금 롱테일 키워드 ─────────────────────────
 st.divider()

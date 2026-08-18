@@ -226,6 +226,10 @@ def _save_keywords_to_history(rows: list):
                     entry["is_parent"] = True
                 if row.get("parent_keyword"):
                     entry["parent_keyword"] = row["parent_keyword"]
+                if row.get("is_seasonal"):
+                    entry["is_seasonal"] = True
+                if row.get("season_month"):
+                    entry["season_month"] = row["season_month"]
             history[kw] = entry
             seen.add(kw)
             added += 1
@@ -1021,7 +1025,7 @@ if st.session_state.season_vol_result:
 
     if st.button("📥 히스토리 저장 + 자식 키워드 수집", type="primary",
                  disabled=len(_s_save_selected)==0, key="season_save_btn"):
-        _s_added = _save_keywords_to_history([{**r, "is_parent": True} for r in _s_save_selected])
+        _s_added = _save_keywords_to_history([{**r, "is_parent": True, "is_seasonal": True, "season_month": st.session_state.season_month} for r in _s_save_selected])
         _s_ck_total = 0
         with st.spinner("자식 키워드 수집 중..."):
             for _sr2 in _s_save_selected:

@@ -226,6 +226,10 @@ def _save_keywords_to_history(rows: list):
                     entry["is_parent"] = True
                 if row.get("parent_keyword"):
                     entry["parent_keyword"] = row["parent_keyword"]
+                if row.get("is_seasonal"):
+                    entry["is_seasonal"] = True
+                if row.get("season_month"):
+                    entry["season_month"] = row["season_month"]
             history[kw] = entry
             seen.add(kw)
             added += 1
@@ -1011,17 +1015,34 @@ if st.session_state.season_vol_result:
     _s_table = naver_api.build_keyword_table(_sv, _sd)
 
     st.markdown("**조회 결과 — 저장할 키워드를 선택하세요**")
+    _res_ver_key = "season_res_ver"
+    _res_sel_key = "season_res_sel"
+    if _res_ver_key not in st.session_state:
+        st.session_state[_res_ver_key] = 0
+    if _res_sel_key not in st.session_state:
+        st.session_state[_res_sel_key] = set()
+    _rb1, _rb2 = st.columns([1, 1])
+    with _rb1:
+        if st.button("전체 선택", key="season_res_sel_all"):
+            st.session_state[_res_sel_key] = {r["keyword"] for r in _s_table}
+            st.session_state[_res_ver_key] += 1
+            st.rerun()
+    with _rb2:
+        if st.button("전체 해제", key="season_res_desel_all"):
+            st.session_state[_res_sel_key] = set()
+            st.session_state[_res_ver_key] += 1
+            st.rerun()
+    _res_ver = st.session_state[_res_ver_key]
     _s_save_selected = []
-    _s_all2 = st.checkbox("전체 선택", key="season_result_all")
     for _sr in _s_table:
         _level, _stars, _ = naver_api.competition_level(_sr["total_search"], _sr["doc_count"])
         _label = f"{_sr['keyword']} | 검색 {_sr['total_search']:,} | 문서 {_sr['doc_count']:,} | 클릭률 {_sr['mobile_ctr']}% | {_stars}"
-        if st.checkbox(_label, value=_s_all2, key=f"sres_{_sr['keyword']}"):
+        if st.checkbox(_label, value=_sr["keyword"] in st.session_state[_res_sel_key], key=f"sres_{_sr['keyword']}_{_res_ver}"):
             _s_save_selected.append(_sr)
 
     if st.button("📥 히스토리 저장 + 자식 키워드 수집", type="primary",
                  disabled=len(_s_save_selected)==0, key="season_save_btn"):
-        _s_added = _save_keywords_to_history([{**r, "is_parent": True} for r in _s_save_selected])
+        _s_added = _save_keywords_to_history([{**r, "is_parent": True, "is_seasonal": True, "season_month": st.session_state.season_month} for r in _s_save_selected])
         _s_ck_total = 0
         with st.spinner("자식 키워드 수집 중..."):
             for _sr2 in _s_save_selected:

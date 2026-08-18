@@ -964,28 +964,30 @@ if st.session_state.season_month:
     # 키워드 체크박스
     st.markdown(f"**{_MONTH_NAMES[_sm]} 키워드 목록**")
     _sel_key = f"season_kw_sel_{_sm}"
+    _ver_key = f"season_kw_ver_{_sm}"
     if _sel_key not in st.session_state:
         st.session_state[_sel_key] = set()
+    if _ver_key not in st.session_state:
+        st.session_state[_ver_key] = 0
     _sbtn1, _sbtn2 = st.columns([1, 1])
     with _sbtn1:
         if st.button("전체 선택", key="season_sel_all"):
             st.session_state[_sel_key] = set(_skws)
+            st.session_state[_ver_key] += 1
             st.rerun()
     with _sbtn2:
         if st.button("전체 해제", key="season_desel_all"):
             st.session_state[_sel_key] = set()
+            st.session_state[_ver_key] += 1
             st.rerun()
+    _s_ver = st.session_state[_ver_key]
     _s_check_cols = st.columns(3)
     _s_selected = []
     for _si, _skw in enumerate(_skws):
         with _s_check_cols[_si % 3]:
-            _chk = st.checkbox(_skw, value=_skw in st.session_state[_sel_key], key=f"skw_{_sm}_{_si}")
+            _chk = st.checkbox(_skw, value=_skw in st.session_state[_sel_key], key=f"skw_{_sm}_{_si}_{_s_ver}")
             if _chk:
                 _s_selected.append(_skw)
-            if _chk and _skw not in st.session_state[_sel_key]:
-                st.session_state[_sel_key].add(_skw)
-            elif not _chk and _skw in st.session_state[_sel_key]:
-                st.session_state[_sel_key].discard(_skw)
 
     if st.button("📊 조회", type="primary", disabled=len(_s_selected)==0, key="season_query_btn"):
         customer_id = os.getenv("NAVER_AD_CUSTOMER_ID","")

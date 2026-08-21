@@ -1432,6 +1432,17 @@ if st.session_state.longtail_table:
         msg = f"✅ {added}개 저장됨 (모바일 클릭률 2% 이상)"
         if filtered_out:
             msg += f" | {filtered_out}개 제외됨 (클릭률 미달)"
+        _lt_parent_map = st.session_state.get("longtail_parent_map", {})
+        if _lt_parent_map:
+            from collections import defaultdict
+            _lt_pc = defaultdict(list)
+            for _ck, _pk in _lt_parent_map.items():
+                _lt_pc[_pk].append(_ck)
+            _lt_ck_total = 0
+            for _pk, _children in _lt_pc.items():
+                _lt_ck_total += _add_to_child_keywords(_pk, _children)
+            if _lt_ck_total:
+                msg += f" | 자식 키워드 {_lt_ck_total}개 child_keywords.json 저장"
         st.success(msg)
         st.rerun()
 

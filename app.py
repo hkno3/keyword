@@ -1622,7 +1622,7 @@ else:
         _page_all_kws.append(_ppk)
         _page_all_kws.extend(_groups_pre.get(_ppk, []))
 
-    col_selall, col_desel, col_stat, col_stat_reset, col_views, col_snap, col_sort, col_expand = st.columns([2, 2, 3, 1, 3, 2, 4, 2])
+    col_selall, col_desel, col_stat, col_stat_reset, col_views, col_snap, col_pub_excl, col_sort, col_expand = st.columns([2, 2, 3, 1, 3, 2, 2, 4, 2])
     with col_selall:
         if st.button("전체 선택", use_container_width=True):
             for kw in _hist_kws:
@@ -1733,6 +1733,24 @@ else:
                 for _kw, _v in sorted(_snap_views.items()):
                     _w.writerow([_today, _kw, _v.get("baw", 0), _v.get("biz", 0)])
             st.toast(f"✅ {len(_snap_views)}개 키워드 스냅샷 저장 완료!")
+    with col_pub_excl:
+        if st.button("✅→🚫 일괄제외", use_container_width=True, help="발행된 키워드를 제외 목록으로 일괄 이동"):
+            _pub_excl_hist = _load_keywords_history()
+            _pub_excl_today = datetime.now().strftime("%Y-%m-%d")
+            _pub_excl_cnt = 0
+            for _pek, _pev in _pub_excl_hist.items():
+                if _pev.get("published") and not _pev.get("excluded"):
+                    _pub_excl_hist[_pek]["excluded"] = True
+                    _pub_excl_hist[_pek]["excluded_at"] = _pub_excl_today
+                    _pub_excl_hist[_pek]["exclude_reason"] = "published"
+                    _pub_excl_cnt += 1
+            if _pub_excl_cnt:
+                _save_keywords_history(_pub_excl_hist)
+                st.session_state.keywords_history = _pub_excl_hist
+                st.toast(f"✅ {_pub_excl_cnt}개 키워드 제외 목록으로 이동됐습니다.")
+                st.rerun()
+            else:
+                st.toast("발행된 키워드가 없습니다.")
     with col_sort:
         _sort_options = ["가나다순", "검색량 높은 순", "문서수 낮은 순", "모바일 클릭률 높은 순", "별점 높은 순", "매우높음+검색량 높은 순"]
         if "hist_sort" not in st.session_state:

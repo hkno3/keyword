@@ -1195,10 +1195,10 @@ if nd_start_btn:
             nd_status.info(f"📄 문서수 조회 중: {', '.join(list(_nd_vol_filtered.keys())[:3])}...")
             _nd_doc_data = naver_api.get_doc_counts_parallel(list(_nd_vol_filtered.keys()), naver_id, naver_secret)
 
-            # 별 5개(ratio < 0.5, 매우 낮음) → 노다지 후보
+            # 별점 3개 이상(보통/낮음/매우 낮음) → 노다지 후보
             _nd_candidates = {
                 kw: vol for kw, vol in _nd_vol_filtered.items()
-                if naver_api.competition_level(vol.get("total_search", 0), _nd_doc_data.get(kw, 999999))[0] == "매우 낮음"
+                if naver_api.competition_level(vol.get("total_search", 0), _nd_doc_data.get(kw, 999999))[0] in ("매우 낮음", "낮음", "보통")
             }
             if not _nd_candidates:
                 continue
@@ -1208,11 +1208,13 @@ if nd_start_btn:
                     break
                 if len(_nd_collected) >= nodaji_target:
                     break
-                nd_status.info(f"💎 노다지 후보 발견! {_nd_kw}")
                 _nd_doc = _nd_doc_data.get(_nd_kw, 0)
                 _nd_row = naver_api.build_keyword_table({_nd_kw: _nd_vol}, {_nd_kw: _nd_doc})
                 if _nd_row:
                     _nd_r = dict(_nd_row[0])
+                    if _nd_r.get("mobile_ctr", 0) < 10:
+                        continue
+                    nd_status.info(f"💎 노다지 후보 발견! {_nd_kw}")
                     _nd_r["source_title"] = _nd_article["title"]
                     _nd_r["source_article"] = _nd_text[:2000]
                     _nd_collected.append(_nd_r)

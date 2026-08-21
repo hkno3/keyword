@@ -1902,7 +1902,7 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
             for exc_kw in _excluded_kws:
                 exc_data = _hist[exc_kw]
                 reason = "✅ 발행됨" if exc_data.get("published") else "삭제"
-                ec1, ec2, ec3 = st.columns([5, 2, 1])
+                ec1, ec2, ec3, ec4 = st.columns([5, 2, 1, 1])
                 with ec1:
                     st.caption(exc_kw)
                 with ec2:
@@ -1913,6 +1913,12 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
                         _hist[exc_kw].pop("excluded_at", None)
                         _hist[exc_kw].pop("exclude_reason", None)
                         _save_keywords_history(_hist)
+                        st.rerun()
+                with ec4:
+                    if st.button("🗑️", key=f"exc_del_{exc_kw}", help="완전 삭제"):
+                        del _hist[exc_kw]
+                        _save_keywords_history(_hist)
+                        st.session_state.keywords_history = _hist
                         st.rerun()
 
     selected_kws_for_gen = [kw for kw in _hist_kws if st.session_state.get(f"hist_chk_{kw}")]

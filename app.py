@@ -1066,12 +1066,18 @@ for key in ["nodaji_keywords", "nodaji_running"]:
     if key not in st.session_state:
         st.session_state[key] = [] if key != "nodaji_running" else False
 
-col_nd1, col_nd2, col_nd3 = st.columns([1, 1, 1])
+col_nd1, col_nd2, col_nd3, col_nd4, col_nd5, col_nd6 = st.columns([1, 1, 1, 1, 1, 1])
 with col_nd1:
     nodaji_target = st.number_input("찾을 키워드 수", min_value=1, value=5, step=1, key="nodaji_target_input")
 with col_nd2:
-    nd_start_btn = st.button("💎 노다지 자동 찾기", type="primary", use_container_width=True)
+    nodaji_min_search = st.number_input("최소 검색량", min_value=0, value=500, step=100, key="nodaji_min_search")
 with col_nd3:
+    nodaji_min_ctr = st.number_input("최소 클릭률(%)", min_value=0, max_value=100, value=5, step=1, key="nodaji_min_ctr")
+with col_nd4:
+    nodaji_min_stars = st.number_input("최소 별 개수", min_value=1, max_value=5, value=3, step=1, key="nodaji_min_stars")
+with col_nd5:
+    nd_start_btn = st.button("💎 노다지 자동 찾기", type="primary", use_container_width=True)
+with col_nd6:
     nd_stop_btn = st.button("⏹ 스탑", key="nd_stop", use_container_width=True)
 
 if nd_stop_btn:
@@ -1187,10 +1193,10 @@ if nd_start_btn:
             nd_status.info(f"📊 검색량 조회 중: {', '.join(_nd_seeds[:3])}...")
             _nd_vol_data = naver_api.get_search_volumes_batch(_nd_seeds, customer_id, ad_key, ad_secret)
 
-            # 검색량 300 이상만 추려서 문서수 조회
+            # 검색량 필터 후 문서수 조회
             _nd_vol_filtered = {
                 kw: vol for kw, vol in _nd_vol_data.items()
-                if vol.get("total_search", 0) >= 300 and kw not in _nd_collected_kws
+                if vol.get("total_search", 0) >= nodaji_min_search and kw not in _nd_collected_kws
             }
             if not _nd_vol_filtered:
                 continue
@@ -1198,10 +1204,12 @@ if nd_start_btn:
             nd_status.info(f"📄 문서수 조회 중: {', '.join(list(_nd_vol_filtered.keys())[:3])}...")
             _nd_doc_data = naver_api.get_doc_counts_parallel(list(_nd_vol_filtered.keys()), naver_id, naver_secret)
 
-            # 별점 3개 이상(보통/낮음/매우 낮음) → 노다지 후보
+            # 별점 필터 → 노다지 후보
+            _nd_star_levels = ["매우 높음", "높음", "보통", "낮음", "매우 낮음"]
+            _nd_valid_levels = set(_nd_star_levels[5 - nodaji_min_stars:])
             _nd_candidates = {
                 kw: vol for kw, vol in _nd_vol_filtered.items()
-                if naver_api.competition_level(vol.get("total_search", 0), _nd_doc_data.get(kw, 999999))[0] in ("매우 낮음", "낮음", "보통")
+                if naver_api.competition_level(vol.get("total_search", 0), _nd_doc_data.get(kw, 999999))[0] in _nd_valid_levels
             }
             if not _nd_candidates:
                 continue
@@ -1215,7 +1223,7 @@ if nd_start_btn:
                 _nd_row = naver_api.build_keyword_table({_nd_kw: _nd_vol}, {_nd_kw: _nd_doc})
                 if _nd_row:
                     _nd_r = dict(_nd_row[0])
-                    if _nd_r.get("mobile_ctr", 0) < 10:
+                    if _nd_r.get("mobile_ctr", 0) < nodaji_min_ctr:
                         continue
                     nd_status.info(f"💎 노다지 후보 발견! {_nd_kw}")
                     _nd_r["source_title"] = _nd_article["title"]

@@ -663,7 +663,7 @@ if "bulk_title_versions" not in st.session_state:
 crawled_file_links = _load_crawled_links()
 groq_keys = [k for k in [groq_key, groq_key2] if k.strip()]
 
-col_cat, col_source, col_num, col_search, col_stars, col_btn1, col_btn2 = st.columns([2, 1, 1, 1, 1, 1, 1])
+col_cat, col_source, col_num, col_search, col_stars, col_ctr, col_btn1, col_btn2 = st.columns([2, 1, 1, 1, 1, 1, 1, 1])
 with col_cat:
     auto_category = st.selectbox("카테고리", [
         "건강", "부동산", "사업", "투자", "정부지원금",
@@ -678,6 +678,9 @@ with col_search:
                                        help="이 검색량 이상인 키워드만 문서수를 조회합니다 (API 절약)")
 with col_stars:
     auto_min_stars = st.number_input("최소 별 개수", min_value=1, max_value=5, value=5, step=1)
+with col_ctr:
+    auto_min_ctr = st.number_input("최소 클릭률(%)", min_value=0, max_value=100, value=1, step=1,
+                                    help="모바일 또는 PC 클릭률 중 하나라도 이 값 이상이어야 합니다")
 with col_btn1:
     start_btn = st.button("🤖 자동 찾기", type="primary", use_container_width=True)
 with col_btn2:
@@ -882,7 +885,7 @@ if start_btn:
                 if len(collected) >= auto_target:
                     break
                 if r["stars"] in valid_stars and \
-                   (r["pc_ctr"] >= 1 or r["mobile_ctr"] >= 1) and \
+                   (r["pc_ctr"] >= auto_min_ctr or r["mobile_ctr"] >= auto_min_ctr) and \
                    r["keyword"] not in collected_kws:
                     r["source_title"] = article["title"]
                     r["source_article"] = text[:2000]

@@ -200,9 +200,6 @@ def _mark_keyword_published(kw: str):
     history = _load_keywords_history()
     if kw in history:
         history[kw]["published"] = True
-        history[kw]["excluded"] = True
-        history[kw]["excluded_at"] = datetime.now().strftime("%Y-%m-%d")
-        history[kw]["exclude_reason"] = "published"
         _save_keywords_history(history)
 
 def _save_keywords_to_history(rows: list):
@@ -1864,10 +1861,6 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
                         _pk_pub_t = st.checkbox("", key=f"hist_pub_{_pk}", value=_pk_pub, label_visibility="collapsed", help="수동 발행")
                         if _pk_pub_t != _pk_pub:
                             _hist[_pk]["published"] = _pk_pub_t
-                            if _pk_pub_t:
-                                _hist[_pk]["excluded"] = True
-                                _hist[_pk]["excluded_at"] = datetime.now().strftime("%Y-%m-%d")
-                                _hist[_pk]["exclude_reason"] = "published"
                             _save_keywords_history(_hist)
                             st.rerun()
                     with pc5:
@@ -1909,10 +1902,6 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
                                 _ck_pub_t = st.checkbox("", key=f"hist_pub_{_ck}", value=_ck_pub, label_visibility="collapsed", help="수동 발행")
                                 if _ck_pub_t != _ck_pub:
                                     _hist[_ck]["published"] = _ck_pub_t
-                                    if _ck_pub_t:
-                                        _hist[_ck]["excluded"] = True
-                                        _hist[_ck]["excluded_at"] = datetime.now().strftime("%Y-%m-%d")
-                                        _hist[_ck]["exclude_reason"] = "published"
                                     _save_keywords_history(_hist)
                                     st.rerun()
     _pp1, _pp2, _pp3 = st.columns([1, 3, 1])

@@ -2108,11 +2108,65 @@ if st.session_state.goods_keywords and not st.session_state.goods_running:
             st.session_state.goods_crawled = []
             st.rerun()
 
+# ── 직접 키워드 입력 ──
+st.markdown("---")
+st.caption("직접 키워드 입력 (부모 키워드 + 자식(자동완성) 키워드 모두 조회)")
+_gm_c1, _gm_c2 = st.columns([5, 1])
+with _gm_c1:
+    goods_manual_input = st.text_input(
+        "키워드 입력", placeholder="예: 무릎보호대, 등산스틱, 비타민C  (쉼표로 구분)",
+        label_visibility="collapsed", key="goods_manual_text"
+    )
+with _gm_c2:
+    goods_manual_btn = st.button("🔍 검색", key="goods_manual_btn", use_container_width=True)
+
+if goods_manual_btn and goods_manual_input.strip():
+    _gm_kws = [k.strip() for k in goods_manual_input.split(",") if k.strip()]
+    _gm_cid = os.getenv("NAVER_AD_CUSTOMER_ID", "")
+    _gm_akey = os.getenv("NAVER_AD_API_KEY", "")
+    _gm_asec = os.getenv("NAVER_AD_SECRET_KEY", "")
+    _gm_nid = os.getenv("NAVER_CLIENT_ID", "")
+    _gm_nsec = os.getenv("NAVER_CLIENT_SECRET", "")
+
+    with st.spinner("자동완성 + 검색량 조회 중..."):
+        _gm_parent_map = {}
+        _gm_all = list(_gm_kws)
+        for _gm_seed in _gm_kws:
+            _gm_parent_map[_gm_seed] = ""
+            for _gm_ch in naver_api.get_autocomplete(_gm_seed):
+                if _gm_ch not in _gm_parent_map:
+                    _gm_parent_map[_gm_ch] = _gm_seed
+                    _gm_all.append(_gm_ch)
+        _gm_all = list(dict.fromkeys(_gm_all))
+        _gm_vols = naver_api.get_search_volumes_batch(_gm_all, _gm_cid, _gm_akey, _gm_asec)
+
+    with st.spinner("문서수 조회 중..."):
+        _gm_docs = naver_api.get_doc_counts_parallel(list(_gm_vols.keys()), _gm_nid, _gm_nsec)
+
+    _gm_table = naver_api.build_keyword_table(_gm_vols, _gm_docs)
+    _gm_existing = {r["keyword"] for r in st.session_state.goods_keywords}
+    _gm_new = []
+    for _gm_row in _gm_table:
+        if _gm_row["keyword"] in _gm_existing:
+            continue
+        _gm_par = _gm_parent_map.get(_gm_row["keyword"], "")
+        _gm_row["is_child"] = bool(_gm_par and _gm_par != _gm_row["keyword"])
+        _gm_row["parent_keyword"] = _gm_par
+        _gm_new.append(_gm_row)
+
+    if _gm_new:
+        st.session_state.goods_keywords = st.session_state.goods_keywords + _gm_new
+        st.success(f"✅ {len(_gm_new)}개 키워드 추가됨")
+        st.rerun()
+    else:
+        st.info("새로 추가할 키워드가 없습니다.")
+
 if goods_start_btn:
     if not groq_key:
         st.error("Groq API 키를 입력해주세요.")
     else:
         st.session_state.goods_running = True
+        _g_prev_kws = list(st.session_state.goods_keywords)  # 기존 결과 보존
         st.session_state.goods_keywords = []
         _g_groq_idx = 0
         _g_groq_client = Groq(api_key=groq_keys[0])
@@ -2225,6 +2279,10 @@ if goods_start_btn:
             _render_goods_progress(_g_collected)
 
         st.session_state.goods_running = False
+        # 기존 결과 + 이번 수집 결과 합치기 (중복 제거)
+        _gm_merged_kws = {r["keyword"] for r in _g_collected}
+        _g_final = _g_collected + [r for r in _g_prev_kws if r["keyword"] not in _gm_merged_kws]
+        st.session_state.goods_keywords = _g_final
         _g_status.empty()
         _g_progress.empty()
         if len(_g_collected) >= goods_target:

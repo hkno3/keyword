@@ -627,6 +627,37 @@ def fetch_google_trending(max_total: int = 50) -> list[dict]:
     return results[:max_total]
 
 
+GOODS_QUERIES = [
+    "쇼핑 신상품 추천", "쇼핑 인기 상품", "요즘 잘 팔리는 상품",
+    "네이버 쇼핑 추천", "인기 생활용품", "베스트 아이템",
+    "건강식품 추천", "다이어트 제품", "피부 관리 제품",
+    "주방용품 추천", "청소 용품 추천", "세탁 세제 추천",
+    "육아용품 추천", "아기 용품", "유아 교육 완구",
+    "반려동물 용품", "강아지 사료 추천", "고양이 용품",
+    "스포츠 용품", "운동 기구 추천", "아웃도어 용품",
+    "뷰티 제품 추천", "화장품 추천", "헤어케어 제품",
+    "전자제품 추천", "주방 가전", "생활 가전",
+    "패션 의류 추천", "신발 추천", "가방 추천",
+    "비타민 영양제", "건강보조식품", "프로바이오틱스",
+    "등산 용품", "캠핑 용품", "낚시 용품",
+]
+
+
+def fetch_goods_articles(max_total: int = 500) -> list[dict]:
+    """쇼핑 관련 블로그+뉴스+카페 기사 수집 (상품 키워드 찾기 전용)"""
+    seen, results = set(), []
+    for query in GOODS_QUERIES:
+        for search_type, label in [("blog", "블로그"), ("news", "뉴스"), ("cafearticle", "카페")]:
+            for item in _search_api(query, search_type, label):
+                t = item["title"]
+                if t and t not in seen:
+                    seen.add(t)
+                    results.append(item)
+        if len(results) >= max_total:
+            break
+    return results[:max_total]
+
+
 def iter_all_for_nodaji(crawled_links: set, max_per_slot: int = 15):
     """
     Generator: 정부RSS + 해외뉴스 + 13카테고리×5섹션을 라운드로빈으로 yield.

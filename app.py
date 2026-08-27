@@ -32,6 +32,7 @@ GEMINI_USAGE_FILE = os.path.join(os.path.dirname(__file__), "gemini_usage.json")
 WP_SITES_FILE = os.path.join(os.path.dirname(__file__), "wp_sites.json")
 SITEMAP_SOURCES_FILE = os.path.join(os.path.dirname(__file__), "sitemap_sources.json")
 CHILD_KEYWORDS_FILE = os.path.join(os.path.dirname(__file__), "child_keywords.json")
+GOODS_HISTORY_FILE = os.path.join(os.path.dirname(__file__), "goods_history.json")
 
 def _load_sitemap_sources() -> list:
     try:
@@ -194,6 +195,17 @@ def _load_keywords_history() -> dict:
 
 def _save_keywords_history(history: dict):
     with open(KEYWORDS_HISTORY_FILE, "w", encoding="utf-8") as f:
+        json.dump(history, f, ensure_ascii=False, indent=2)
+
+def _load_goods_history() -> dict:
+    try:
+        with open(GOODS_HISTORY_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def _save_goods_history(history: dict):
+    with open(GOODS_HISTORY_FILE, "w", encoding="utf-8") as f:
         json.dump(history, f, ensure_ascii=False, indent=2)
 
 def _mark_keyword_published(kw: str):
@@ -1978,6 +1990,256 @@ div[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
             if skip_cnt:
                 st.info(f"{skip_cnt}개는 이미 있어서 건너뜁니다.")
             st.rerun()
+
+# ── 상품 키워드 찾기 ─────────────────────────────────────
+st.divider()
+st.subheader("🛍️ 상품 키워드 찾기")
+st.caption("쇼핑 관련 소스에서 상품/제품 키워드를 자동 수집합니다. 별도 세션으로 관리됩니다.")
+
+for _gk in ["goods_keywords", "goods_crawled", "goods_running"]:
+    if _gk not in st.session_state:
+        st.session_state[_gk] = [] if _gk != "goods_running" else False
+if "goods_history" not in st.session_state:
+    st.session_state.goods_history = _load_goods_history()
+if "goods_articles_cache" not in st.session_state:
+    st.session_state.goods_articles_cache = []
+
+_g_cols = st.columns([1, 1, 1, 1, 1, 1])
+with _g_cols[0]:
+    goods_target = st.number_input("찾을 키워드 수", min_value=1, value=5, step=1, key="goods_target")
+with _g_cols[1]:
+    goods_min_search = st.number_input("최소 검색량", min_value=0, value=500, step=100, key="goods_min_search")
+with _g_cols[2]:
+    goods_min_ctr = st.number_input("최소 클릭률(%)", min_value=0, max_value=100, value=5, step=1, key="goods_min_ctr")
+with _g_cols[3]:
+    goods_min_stars = st.number_input("최소 별 개수", min_value=1, max_value=5, value=3, step=1, key="goods_min_stars")
+with _g_cols[4]:
+    goods_start_btn = st.button("🛍️ 찾기 시작", type="primary", use_container_width=True)
+with _g_cols[5]:
+    goods_stop_btn = st.button("⏹ 스탑", key="goods_stop", use_container_width=True)
+
+if goods_stop_btn:
+    st.session_state.goods_running = False
+
+if st.session_state.goods_crawled:
+    _g_last = st.session_state.goods_crawled[-1]
+    st.caption(f"마지막 분석: {_g_last['title'][:60]}")
+
+goods_table_box = st.empty()
+
+def _render_goods_table(keywords):
+    if not keywords:
+        return
+    with goods_table_box.container():
+        st.success(f"✅ {len(keywords)}개 키워드 수집됨")
+        for _gi, _gr in enumerate(keywords):
+            _gcols = st.columns([0.5, 3, 1, 1, 1, 1, 1, 1, 1])
+            with _gcols[0]:
+                st.checkbox("", key=f"goods_chk_{_gi}", value=st.session_state.get(f"goods_chk_{_gi}", True))
+            with _gcols[1]:
+                _is_child = _gr.get("is_child", False)
+                _indent = "↳ " if _is_child else ""
+                st.markdown(f'<span style="font-size:0.88em;">{_indent}<b>{_gr["keyword"]}</b></span>', unsafe_allow_html=True)
+            with _gcols[2]:
+                st.caption(f"{_gr['total_search']:,}")
+            with _gcols[3]:
+                st.caption(f"PC {_gr['pc_ctr']}%")
+            with _gcols[4]:
+                st.caption(f"모바일 {_gr['mobile_ctr']}%")
+            with _gcols[5]:
+                st.caption(f"문서 {_gr['doc_count']:,}")
+            with _gcols[6]:
+                st.caption(_gr["level"])
+            with _gcols[7]:
+                st.caption(_gr["stars"])
+            with _gcols[8]:
+                st.markdown(f'<a href="https://search.naver.com/search.naver?query={_gr["keyword"]}" target="_blank">🔍</a>', unsafe_allow_html=True)
+
+_render_goods_table(st.session_state.goods_keywords)
+
+if st.session_state.goods_keywords and not st.session_state.goods_running:
+    _g_save_col, _g_clear_col = st.columns([2, 1])
+    with _g_save_col:
+        if st.button("💾 체크된 키워드 goods_history.json 저장", type="primary", use_container_width=True):
+            _g_hist = _load_goods_history()
+            _g_added = 0
+            for _gi, _gr in enumerate(st.session_state.goods_keywords):
+                if st.session_state.get(f"goods_chk_{_gi}", True):
+                    _gkw = _gr["keyword"]
+                    if _gkw not in _g_hist:
+                        _g_hist[_gkw] = {
+                            "saved_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                            "is_parent": not _gr.get("is_child", False),
+                            "parent": _gr.get("parent_keyword", ""),
+                            "pc_search": _gr["pc_search"],
+                            "mobile_search": _gr["mobile_search"],
+                            "total_search": _gr["total_search"],
+                            "pc_ctr": _gr["pc_ctr"],
+                            "mobile_ctr": _gr["mobile_ctr"],
+                            "doc_count": _gr["doc_count"],
+                            "level": _gr["level"],
+                            "stars": _gr["stars"],
+                        }
+                        _g_added += 1
+            _save_goods_history(_g_hist)
+            st.session_state.goods_history = _g_hist
+            st.success(f"✅ {_g_added}개 저장됐습니다.")
+    with _g_clear_col:
+        if st.button("🗑️ 결과 초기화", key="goods_clear", use_container_width=True):
+            st.session_state.goods_keywords = []
+            st.session_state.goods_crawled = []
+            st.rerun()
+
+if goods_start_btn:
+    if not groq_key:
+        st.error("Groq API 키를 입력해주세요.")
+    else:
+        st.session_state.goods_running = True
+        st.session_state.goods_keywords = []
+        _g_groq_idx = 0
+        _g_groq_client = Groq(api_key=groq_keys[0])
+        customer_id = os.getenv("NAVER_AD_CUSTOMER_ID", "")
+        ad_key = os.getenv("NAVER_AD_API_KEY", "")
+        ad_secret = os.getenv("NAVER_AD_SECRET_KEY", "")
+        naver_id = os.getenv("NAVER_CLIENT_ID", "")
+        naver_secret = os.getenv("NAVER_CLIENT_SECRET", "")
+
+        if not st.session_state.get("goods_articles_cache"):
+            with st.spinner("쇼핑 관련 기사 수집 중..."):
+                st.session_state.goods_articles_cache = news_fetcher.fetch_goods_articles(max_total=500)
+
+        _g_articles = st.session_state.goods_articles_cache
+        _g_crawled_links = _load_crawled_links()
+        _g_collected = []
+        _g_goods_hist = _load_goods_history()
+        _g_existing = set(_g_goods_hist.keys())
+        _g_collected_kws = set(_g_existing)
+
+        _g_status = st.empty()
+        _g_progress = st.progress(0)
+
+        all_stars = ["⭐", "⭐⭐", "⭐⭐⭐", "⭐⭐⭐⭐", "⭐⭐⭐⭐⭐"]
+        valid_stars_goods = set(all_stars[goods_min_stars - 1:])
+
+        for _g_art in _g_articles:
+            if not st.session_state.goods_running:
+                break
+            if len(_g_collected) >= goods_target:
+                break
+            if _g_art["link"] in _g_crawled_links:
+                continue
+
+            _g_status.info(f"🔍 {_g_art['title'][:60]}...")
+            _g_text = f"{_g_art['title']}\n{_g_art.get('description', '')}".strip()
+            _save_crawled_link(_g_art["link"])
+            _g_crawled_links.add(_g_art["link"])
+            st.session_state.goods_crawled.append({"link": _g_art["link"], "title": _g_art["title"]})
+
+            if not _g_text:
+                continue
+
+            try:
+                _g_seeds, _g_tokens = claude_service.extract_goods_keywords(_g_text, _g_groq_client)
+                _add_groq_tokens(_g_tokens)
+                _g_seeds = [s for s in _g_seeds if len(s.strip()) >= 2]
+            except Exception as _g_e:
+                _g_err = str(_g_e)
+                if "429" in _g_err or "rate_limit" in _g_err.lower():
+                    _g_groq_idx += 1
+                    if _g_groq_idx < len(groq_keys):
+                        _g_groq_client = Groq(api_key=groq_keys[_g_groq_idx])
+                        try:
+                            _g_seeds, _g_tokens = claude_service.extract_goods_keywords(_g_text, _g_groq_client)
+                            _add_groq_tokens(_g_tokens)
+                            _g_seeds = [s for s in _g_seeds if len(s.strip()) >= 2]
+                        except Exception:
+                            continue
+                    else:
+                        _g_status.error("🚫 모든 Groq API 키 한도 초과.")
+                        st.session_state.goods_running = False
+                        break
+                else:
+                    continue
+
+            if not _g_seeds:
+                continue
+
+            _g_status.info(f"🌱 씨드: {', '.join(_g_seeds[:5])}")
+
+            # 자동완성으로 자식 키워드 수집
+            _g_ac_map = {}  # {자식키워드: 부모씨드}
+            for _g_seed in _g_seeds:
+                for _g_child in naver_api.get_autocomplete(_g_seed):
+                    if _g_child not in _g_ac_map:
+                        _g_ac_map[_g_child] = _g_seed
+            _g_all_kws = list(_g_ac_map.keys()) or _g_seeds
+
+            # 검색량 조회
+            _g_related = naver_api.get_search_volumes_batch(_g_all_kws, customer_id, ad_key, ad_secret)
+            _g_to_lookup = {k: v for k, v in _g_related.items() if v["total_search"] >= goods_min_search}
+
+            if not _g_to_lookup:
+                continue
+
+            # 문서수 조회
+            _g_doc_counts = naver_api.get_doc_counts_parallel(list(_g_to_lookup.keys()), naver_id, naver_secret)
+            _g_table = naver_api.build_keyword_table(_g_to_lookup, _g_doc_counts)
+
+            for _g_row in _g_table:
+                if len(_g_collected) >= goods_target:
+                    break
+                _g_kw = _g_row["keyword"]
+                if _g_kw in _g_collected_kws:
+                    continue
+                if _g_row["stars"] not in valid_stars_goods:
+                    continue
+                if not (_g_row["pc_ctr"] >= goods_min_ctr or _g_row["mobile_ctr"] >= goods_min_ctr):
+                    continue
+                # 부모 씨드가 있으면 자식으로 표시
+                _g_parent = _g_ac_map.get(_g_kw, "")
+                _g_row["is_child"] = bool(_g_parent and _g_parent != _g_kw)
+                _g_row["parent_keyword"] = _g_parent
+                _g_collected.append(_g_row)
+                _g_collected_kws.add(_g_kw)
+
+            st.session_state.goods_keywords = _g_collected
+            _g_progress.progress(min(len(_g_collected) / goods_target, 1.0))
+            _render_goods_table(_g_collected)
+
+        st.session_state.goods_running = False
+        _g_status.empty()
+        _g_progress.empty()
+        if len(_g_collected) >= goods_target:
+            st.success(f"🎉 상품 키워드 {len(_g_collected)}개 수집 완료!")
+        else:
+            st.warning(f"기사를 다 돌았습니다. {len(_g_collected)}개 수집됨.")
+        st.rerun()
+
+if st.session_state.goods_history:
+    with st.expander(f"📦 상품 히스토리 ({len(st.session_state.goods_history)}개)"):
+        _gh = st.session_state.goods_history
+        _gh_dl_col, _gh_empty = st.columns([2, 5])
+        with _gh_dl_col:
+            st.download_button(
+                "💾 goods_history.json 저장",
+                data=json.dumps(_gh, ensure_ascii=False, indent=2),
+                file_name="goods_history.json",
+                mime="application/json",
+                use_container_width=True,
+            )
+        for _gh_kw, _gh_data in list(_gh.items()):
+            _gh_c1, _gh_c2, _gh_c3 = st.columns([4, 3, 1])
+            with _gh_c1:
+                _gh_parent_marker = "" if _gh_data.get("is_parent", True) else " ↳"
+                st.markdown(f'<span style="font-size:0.85em;">{_gh_parent_marker}<b>{_gh_kw}</b></span>', unsafe_allow_html=True)
+            with _gh_c2:
+                st.caption(f"검색 {_gh_data.get('total_search', 0):,} | {_gh_data.get('stars', '')} | {_gh_data.get('saved_at', '')[:10]}")
+            with _gh_c3:
+                if st.button("✕", key=f"gh_del_{_gh_kw}"):
+                    del _gh[_gh_kw]
+                    _save_goods_history(_gh)
+                    st.session_state.goods_history = _gh
+                    st.rerun()
 
 # ── 블랙리스트 섹션 ──────────────────────────────────────
 _bl_kws = sorted(_blacklist.keys())

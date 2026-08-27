@@ -336,6 +336,44 @@ JSON 외 다른 텍스트는 절대 출력하지 마세요.
     return result or {}, tokens
 
 
+def extract_goods_keywords(article: str, client: Groq) -> tuple[list[str], int]:
+    """기사에서 상품/제품명 씨드 키워드 추출. 구매 의도 키워드 위주."""
+    response = client.chat.completions.create(
+        model=MODEL,
+        max_tokens=400,
+        reasoning_effort="none",
+        messages=[{
+            "role": "user",
+            "content": f"""네이버 쇼핑 SEO 전문가입니다.
+아래 글에서 사람들이 네이버 쇼핑에서 직접 검색할 상품명/제품명 키워드를 추출하세요. (최대 10개, 관련 있는 것만)
+
+엄격한 조건:
+- 반드시 구매 의도가 있는 상품명/제품명 (예: 무릎보호대, 등산스틱, 비타민C, 콜라겐, 공기청정기)
+- 절대 금지 — 정보성 단어: "효능", "방법", "후기", "비교", "추천방법"
+- 절대 금지 — 추상어: "건강", "효과적", "좋은", "최고", "인기"
+- 절대 금지 — 브랜드명 (특정 회사명, 상표명)
+- 일반 소비자가 쇼핑몰에서 검색하는 구체적인 상품 카테고리 단어
+
+나쁜 예: 건강, 효능, 좋은제품, 삼성, LG
+좋은 예: 무릎보호대, 등산스틱, 비타민C, 공기청정기, 유산균
+
+글:
+{article[:500]}
+
+JSON 배열로만 반환: ["상품명1", "상품명2", ...]""",
+        }],
+    )
+    tokens = response.usage.total_tokens if response.usage else 0
+    text = response.choices[0].message.content.strip()
+    match = re.search(r"\[.*?\]", text, re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group()), tokens
+        except json.JSONDecodeError:
+            pass
+    return [], tokens
+
+
 def _has_japanese(text: str) -> bool:
     return any('぀' <= c <= 'ヿ' for c in text)
 

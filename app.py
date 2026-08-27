@@ -2010,9 +2010,9 @@ with _g_cols[0]:
 with _g_cols[1]:
     goods_min_search = st.number_input("최소 검색량", min_value=0, value=500, step=100, key="goods_min_search")
 with _g_cols[2]:
-    goods_min_ctr = st.number_input("최소 클릭률(%)", min_value=0, max_value=100, value=5, step=1, key="goods_min_ctr")
+    goods_min_ctr = st.number_input("최소 클릭률(%)", min_value=0, max_value=100, value=2, step=1, key="goods_min_ctr")
 with _g_cols[3]:
-    goods_min_stars = st.number_input("최소 별 개수", min_value=1, max_value=5, value=3, step=1, key="goods_min_stars")
+    goods_min_stars = st.number_input("최소 별 개수", min_value=1, max_value=5, value=5, step=1, key="goods_min_stars")
 with _g_cols[4]:
     goods_start_btn = st.button("🛍️ 찾기 시작", type="primary", use_container_width=True)
 with _g_cols[5]:

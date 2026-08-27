@@ -169,6 +169,48 @@ def get_search_volumes_batch(keywords: List[str], customer_id: str, api_key: str
     return results
 
 
+def get_search_volumes_fast(keywords: List[str], customer_id: str, api_key: str, secret_key: str, chunk_size: int = 5) -> Dict[str, Dict]:
+    """검색량 빠른 조회 — 여러 키워드를 chunk_size개씩 묶어 한 번에 API 호출 (수동 입력용)"""
+    results: Dict[str, Dict] = {}
+    uri = "/keywordstool"
+    sanitized_map = {_sanitize_keyword(kw): kw for kw in keywords if _sanitize_keyword(kw)}
+    valid_kws = [kw for kw in keywords if _sanitize_keyword(kw)]
+
+    for i in range(0, len(valid_kws), chunk_size):
+        chunk = valid_kws[i:i + chunk_size]
+        hint = ",".join(_sanitize_keyword(kw) for kw in chunk)
+        encoded = urllib.parse.quote_plus(hint)
+        headers = _ad_headers("GET", uri, customer_id, api_key, secret_key)
+        url = f"{SEARCH_AD_BASE_URL}{uri}?hintKeywords={encoded}&showDetail=1"
+        try:
+            resp = requests.get(url, headers=headers, timeout=10)
+            resp.raise_for_status()
+            for item in resp.json().get("keywordList", []):
+                rel_kw = item.get("relKeyword", "")
+                rel_sanitized = _sanitize_keyword(rel_kw)
+                if rel_sanitized not in sanitized_map:
+                    continue
+                matched_kw = sanitized_map[rel_sanitized]
+                pc = _parse_count(item.get("monthlyPcQcCnt", 0))
+                mobile = _parse_count(item.get("monthlyMobileQcCnt", 0))
+                total = pc + mobile
+                if matched_kw not in results or total > results[matched_kw]["total_search"]:
+                    results[matched_kw] = {
+                        "pc_search": pc,
+                        "mobile_search": mobile,
+                        "total_search": total,
+                        "pc_click": _parse_count(item.get("monthlyAvePcClkCnt", 0)),
+                        "mobile_click": _parse_count(item.get("monthlyAveMobileClkCnt", 0)),
+                        "pc_ctr": item.get("monthlyAvePcCtr", 0),
+                        "mobile_ctr": item.get("monthlyAveMobileCtr", 0),
+                        "comp_idx": item.get("compIdx", "N/A"),
+                    }
+        except Exception as e:
+            print(f"[SearchAD fast] chunk 오류: {e}")
+
+    return results
+
+
 def get_blog_doc_count(keyword: str, client_id: str, client_secret: str) -> int:
     for attempt in range(4):
         try:

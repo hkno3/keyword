@@ -2138,7 +2138,7 @@ if goods_manual_btn and goods_manual_input.strip():
                     _gm_parent_map[_gm_ch] = _gm_seed
                     _gm_all.append(_gm_ch)
         _gm_all = list(dict.fromkeys(_gm_all))
-        _gm_vols = naver_api.get_search_volumes_batch(_gm_all, _gm_cid, _gm_akey, _gm_asec)
+        _gm_vols = naver_api.get_search_volumes_fast(_gm_all, _gm_cid, _gm_akey, _gm_asec)
 
     with st.spinner("문서수 조회 중..."):
         _gm_docs = naver_api.get_doc_counts_parallel(list(_gm_vols.keys()), _gm_nid, _gm_nsec)

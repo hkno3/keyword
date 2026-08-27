@@ -2027,35 +2027,53 @@ if st.session_state.goods_crawled:
 
 goods_table_box = st.empty()
 
-def _render_goods_table(keywords):
+def _render_goods_progress(keywords):
+    """루프 진행 중 표시용 — 체크박스 없는 dataframe (키 중복 방지)"""
     if not keywords:
         return
+    _df = pd.DataFrame([{
+        "키워드": ("↳ " if r.get("is_child") else "") + r["keyword"],
+        "검색(합계)": f"{r['total_search']:,}",
+        "클릭률PC": f"{r['pc_ctr']}%",
+        "클릭률모바일": f"{r['mobile_ctr']}%",
+        "문서수": f"{r['doc_count']:,}",
+        "별": r["stars"],
+    } for r in keywords])
     with goods_table_box.container():
-        st.success(f"✅ {len(keywords)}개 키워드 수집됨")
-        for _gi, _gr in enumerate(keywords):
-            _gcols = st.columns([0.5, 3, 1, 1, 1, 1, 1, 1, 1])
-            with _gcols[0]:
-                st.checkbox("", key=f"goods_chk_{_gi}", value=st.session_state.get(f"goods_chk_{_gi}", True))
-            with _gcols[1]:
-                _is_child = _gr.get("is_child", False)
-                _indent = "↳ " if _is_child else ""
-                st.markdown(f'<span style="font-size:0.88em;">{_indent}<b>{_gr["keyword"]}</b></span>', unsafe_allow_html=True)
-            with _gcols[2]:
-                st.caption(f"{_gr['total_search']:,}")
-            with _gcols[3]:
-                st.caption(f"PC {_gr['pc_ctr']}%")
-            with _gcols[4]:
-                st.caption(f"모바일 {_gr['mobile_ctr']}%")
-            with _gcols[5]:
-                st.caption(f"문서 {_gr['doc_count']:,}")
-            with _gcols[6]:
-                st.caption(_gr["level"])
-            with _gcols[7]:
-                st.caption(_gr["stars"])
-            with _gcols[8]:
-                st.markdown(f'<a href="https://search.naver.com/search.naver?query={_gr["keyword"]}" target="_blank">🔍</a>', unsafe_allow_html=True)
+        st.info(f"⏳ 수집 중... {len(keywords)}개")
+        st.dataframe(_df, hide_index=True, use_container_width=True)
 
-_render_goods_table(st.session_state.goods_keywords)
+def _render_goods_table(keywords):
+    """수집 완료 후 표시용 — 체크박스 포함"""
+    if not keywords:
+        return
+    st.success(f"✅ {len(keywords)}개 키워드 수집됨")
+    for _gi, _gr in enumerate(keywords):
+        _gcols = st.columns([0.5, 3, 1, 1, 1, 1, 1, 1, 1])
+        with _gcols[0]:
+            st.checkbox("", key=f"goods_chk_{_gi}", value=st.session_state.get(f"goods_chk_{_gi}", True))
+        with _gcols[1]:
+            _is_child = _gr.get("is_child", False)
+            _indent = "↳ " if _is_child else ""
+            st.markdown(f'<span style="font-size:0.88em;">{_indent}<b>{_gr["keyword"]}</b></span>', unsafe_allow_html=True)
+        with _gcols[2]:
+            st.caption(f"{_gr['total_search']:,}")
+        with _gcols[3]:
+            st.caption(f"PC {_gr['pc_ctr']}%")
+        with _gcols[4]:
+            st.caption(f"모바일 {_gr['mobile_ctr']}%")
+        with _gcols[5]:
+            st.caption(f"문서 {_gr['doc_count']:,}")
+        with _gcols[6]:
+            st.caption(_gr["level"])
+        with _gcols[7]:
+            st.caption(_gr["stars"])
+        with _gcols[8]:
+            st.markdown(f'<a href="https://search.naver.com/search.naver?query={_gr["keyword"]}" target="_blank">🔍</a>', unsafe_allow_html=True)
+
+# 결과 표시 — 실행 중이 아닐 때만 체크박스 포함 테이블 렌더
+if not goods_start_btn:
+    _render_goods_table(st.session_state.goods_keywords)
 
 if st.session_state.goods_keywords and not st.session_state.goods_running:
     _g_save_col, _g_clear_col = st.columns([2, 1])
@@ -2204,7 +2222,7 @@ if goods_start_btn:
 
             st.session_state.goods_keywords = _g_collected
             _g_progress.progress(min(len(_g_collected) / goods_target, 1.0))
-            _render_goods_table(_g_collected)
+            _render_goods_progress(_g_collected)
 
         st.session_state.goods_running = False
         _g_status.empty()

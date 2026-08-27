@@ -638,7 +638,7 @@ def _run_longtail(seed_keywords: list):
         return
 
     with st.spinner(f"검색량 조회 중... ({len(ac_all)}개)"):
-        related = naver_api.get_search_volumes_batch(ac_all, customer_id, ad_key, ad_secret)
+        related = naver_api.get_search_volumes_fast(ac_all, customer_id, ad_key, ad_secret)
 
     with st.spinner(f"문서수 조회 중... ({len(related)}개)"):
         doc_counts = naver_api.get_doc_counts_parallel(list(related.keys()), naver_id, naver_secret)
@@ -877,7 +877,7 @@ if start_btn:
                 autocomplete_kws = seeds
 
             # 검색량 조회
-            related = naver_api.get_search_volumes_batch(autocomplete_kws, customer_id, ad_key, ad_secret)
+            related = naver_api.get_search_volumes_fast(autocomplete_kws, customer_id, ad_key, ad_secret)
             st.session_state.naver_ad_calls += len(autocomplete_kws)
             to_lookup = {k: v for k, v in related.items() if v["total_search"] >= auto_min_search}
 
@@ -1015,7 +1015,7 @@ if st.session_state.season_month:
         naver_id = os.getenv("NAVER_CLIENT_ID","")
         naver_secret = os.getenv("NAVER_CLIENT_SECRET","")
         with st.spinner("검색량 조회 중..."):
-            _sv = naver_api.get_search_volumes_batch(_s_selected, customer_id, ad_key, ad_secret)
+            _sv = naver_api.get_search_volumes_fast(_s_selected, customer_id, ad_key, ad_secret)
         with st.spinner("문서수 조회 중..."):
             _sd = naver_api.get_doc_counts_parallel(list(_sv.keys()), naver_id, naver_secret)
         st.session_state.season_vol_result = _sv
@@ -1203,7 +1203,7 @@ if nd_start_btn:
                 continue
 
             nd_status.info(f"📊 검색량 조회 중: {', '.join(_nd_seeds[:3])}...")
-            _nd_vol_data = naver_api.get_search_volumes_batch(_nd_seeds, customer_id, ad_key, ad_secret)
+            _nd_vol_data = naver_api.get_search_volumes_fast(_nd_seeds, customer_id, ad_key, ad_secret)
 
             # 검색량 필터 후 문서수 조회
             _nd_vol_filtered = {
@@ -1348,7 +1348,7 @@ if brf_btn:
             _brf_status.warning("키워드를 추출하지 못했어요.")
         else:
             _brf_status.info(f"📊 검색량 조회 중: {', '.join(_brf_seeds[:5])}... (총 {len(_brf_seeds)}개)")
-            _brf_vol = naver_api.get_search_volumes_batch(_brf_seeds, customer_id, ad_key, ad_secret)
+            _brf_vol = naver_api.get_search_volumes_fast(_brf_seeds, customer_id, ad_key, ad_secret)
             _existing_kws_brf = set(_load_keywords_history().keys()) | set(_load_blacklist().keys())
             _brf_vol_filtered = {
                 kw: vol for kw, vol in _brf_vol.items()
@@ -1661,7 +1661,7 @@ else:
             _naver_client_secret = os.getenv("NAVER_CLIENT_SECRET", "")
             _update_targets = _page_all_kws
             with st.spinner(f"통계 조회 중... ({len(_update_targets)}개)"):
-                _vol_data = naver_api.get_search_volumes_batch(_update_targets, _naver_cid, _naver_akey, _naver_skey)
+                _vol_data = naver_api.get_search_volumes_fast(_update_targets, _naver_cid, _naver_akey, _naver_skey)
                 _doc_data = naver_api.get_doc_counts_parallel(_update_targets, _naver_client_id, _naver_client_secret)
             _updated = 0
             for kw in _update_targets:
@@ -2138,7 +2138,7 @@ if goods_manual_btn and goods_manual_input.strip():
                     _gm_parent_map[_gm_ch] = _gm_seed
                     _gm_all.append(_gm_ch)
         _gm_all = list(dict.fromkeys(_gm_all))
-        _gm_vols = naver_api.get_search_volumes_batch(_gm_all, _gm_cid, _gm_akey, _gm_asec)
+        _gm_vols = naver_api.get_search_volumes_fast(_gm_all, _gm_cid, _gm_akey, _gm_asec)
 
     with st.spinner("문서수 조회 중..."):
         _gm_docs = naver_api.get_doc_counts_parallel(list(_gm_vols.keys()), _gm_nid, _gm_nsec)
@@ -2247,7 +2247,7 @@ if goods_start_btn:
             _g_all_kws = list(_g_ac_map.keys()) or _g_seeds
 
             # 검색량 조회
-            _g_related = naver_api.get_search_volumes_batch(_g_all_kws, customer_id, ad_key, ad_secret)
+            _g_related = naver_api.get_search_volumes_fast(_g_all_kws, customer_id, ad_key, ad_secret)
             _g_to_lookup = {k: v for k, v in _g_related.items() if v["total_search"] >= goods_min_search}
 
             if not _g_to_lookup:
@@ -2758,7 +2758,7 @@ if st.button("🚀 키워드 분석 시작", type="primary", use_container_width
         if autocomplete_kws:
             st.write(f"✅ 자동완성 키워드 총 {len(autocomplete_kws)}개")
             st.write(f"📈 검색량 조회 중... ({len(autocomplete_kws)}개)")
-            related = naver_api.get_search_volumes_batch(autocomplete_kws, customer_id, ad_key, ad_secret)
+            related = naver_api.get_search_volumes_fast(autocomplete_kws, customer_id, ad_key, ad_secret)
         else:
             st.warning("⚠️ 자동완성 수집 실패 → 연관키워드 방식으로 대체")
             related = naver_api.get_related_keywords(seeds, customer_id, ad_key, ad_secret)
